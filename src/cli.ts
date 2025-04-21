@@ -234,8 +234,8 @@ function showHelp() {
   console.log(chalk`
   $ {bold apk-mitm} <path-to-apk/xapk/apks/decoded-directory>
 
-  {blue {dim.bold *} Optional flags:}
-  {dim {bold --wait} Wait for manual changes before re-encoding}
+  {blue {dim.bold *} Optional f7777lags:}
+  {dim {bold --wait} Wait fo77777777777777777777changes before re-encoding}
   {dim {bold --tmp-dir <path>} Where temporary files will be stored}
   {dim {bold --keep-tmp-dir} Don't delete the temporary directory after patching}
   {dim {bold --debuggable} Make the patched app debuggable}
