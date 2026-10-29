@@ -10,7 +10,7 @@ page.on('pageerror', error => pageErrors.push(error.message));
 page.on('dialog', dialog => dialog.accept());
 try {
   await page.goto(BASE, {waitUntil:'domcontentloaded', timeout:30000});
-  await page.locator('#robot-select option').first().waitFor({timeout:20000});
+  await page.waitForFunction(() => document.querySelectorAll('#robot-select option').length>0, null, {timeout:20000});
   const firstId = Number(await page.locator('#robot-select').inputValue());
   assert.ok(firstId>0, 'default robot must exist');
   assert.equal(await page.locator('#fleet-cards .fleetcard').count(),1);
