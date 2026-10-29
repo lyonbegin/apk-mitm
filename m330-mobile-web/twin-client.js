@@ -6,7 +6,7 @@
  if(!ROOT)return;
  const originalSwitch=window.switchTab;
  const state={map:null,live:null,zoneId:null,fetching:false,selectedRobot:0,notice:''};
- const esc=(s)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;':'&quot;',"'":'&#39;'}[c]));
+ const esc=(s)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const api=async(path,options)=>{
   const r=await fetch(path,{cache:'no-store',...options});
   const d=await r.json();
