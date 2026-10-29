@@ -1,0 +1,45 @@
+name: M330 Pro mobile web smoke test
+on:
+  push:
+    branches:
+      - m330-pro-mobile-web
+    paths:
+      - 'm330-mobile-web/**'
+      - '.github/workflows/m330-web-smoke.yml'
+  workflow_dispatch:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      BASE: https://m330-web-github-production.up.railway.app
+    steps:
+      - name: Verify public UI and persistent SQLite API
+        shell: bash
+        run: |
+          set -euo pipefail
+          for n in $(seq 1 30); do
+            if curl -fsS --max-time 8 "$BASE/api/health" -o /tmp/health.json && \
+               jq -e '.ok == true and .storage == "sqlite"' /tmp/health.json >/dev/null; then
+              break
+            fi
+            sleep 3
+          done
+          grep -q "M330" <(curl -fsS "$BASE/")
+          curl -fsS -c /tmp/m330-cookie -b /tmp/m330-cookie "$BASE/api/dashboard" >/tmp/before.json
+          jq -e '.mode=="demo" and .features.real_write_verified == false' /tmp/before.json
+          curl -fsS -c /tmp/m330-cookie -b /tmp/m330-cookie \
+            -H "Content-Type: application/json" \
+            -d '{"floor_id":"myeonhak-3","time":"08:30","weekdays":"0,1,2,3,4"}' \
+            "$BASE/api/tasks" >/tmp/created.json
+          id=$(jq -r '.id' /tmp/created.json)
+          test "$id" != null
+          curl -fsS -c /tmp/m330-cookie -b /tmp/m330-cookie "$BASE/api/dashboard" >/tmp/after.json
+          jq -e --argjson id "$id" '.tasks | any(.id == $id)' /tmp/after.json
+          curl -fsS "$BASE/api/dashboard" | jq -e '.tasks | length == 0'
+          curl -fsS -b /tmp/m330-cookie -X DELETE "$BASE/api/tasks/$id" | jq -e '.ok == true'
+          curl -fsS -b /tmp/m330-cookie "$BASE/api/dashboard" | jq -e --argjson id "$id" '.tasks | all(.id != $id)'
+          curl -fsS -b /tmp/m330-cookie -H 'Content-Type: application/json' \
+            -d '{"command":"start","floor_id":"myeonhak-3"}' \
+            "$BASE/api/command" | jq -e '.simulated==true'
+          echo "PASS: UI, persistent SQLite schedule CRUD, cookie isolation, demo-only commands"
