@@ -16,13 +16,24 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - uses: oven-sh/setup-bun@v2
+      - name: Start local M330 web and twin server
+        shell: bash
+        run: |
+          M330_DB_PATH=/tmp/m330-fleet-ci.sqlite PORT=3000 bun run m330-mobile-web/index.ts >/tmp/m330-server.log 2>&1 &
+          echo $! > /tmp/m330-server.pid
+          for n in $(seq 1 30); do
+            if curl -fsS --max-time 2 http://127.0.0.1:3000/api/health | grep -q digital_twin_simulation; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:3000/api/health | grep -q digital_twin_simulation
       - name: Install Playwright and Chromium
         working-directory: m330-mobile-web/tests
         run: |
           npm install --no-audit --no-fund
           npx playwright install --with-deps chromium
-      - name: Verify live mobile fleet UI
+      - name: Verify mobile fleet and staircase twin UI in local Chromium
         working-directory: m330-mobile-web/tests
         env:
-          M330_BASE: https://m330-web-github-production.up.railway.app/
+          M330_BASE: http://127.0.0.1:3000/
         run: node fleet-playwright.mjs
