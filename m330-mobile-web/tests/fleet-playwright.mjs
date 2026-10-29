@@ -40,8 +40,33 @@ try {
   await page.locator('#fleet-manager summary').click(); // restore open for controls
   await page.locator('#fleet-manager button.danger').click();
   await page.waitForFunction(() => document.querySelectorAll('#fleet-cards .fleetcard').length===1, {timeout:10000});
+
+  await page.locator('[data-nav="map"]').click();
+  await page.locator('#twin-svg [data-zone="stairs-west"]').waitFor({timeout:20000});
+  assert.equal(await page.locator('#twin-svg [data-zone^="stairs-"]').count(),2);
+  assert.equal(await page.locator('#twin-svg [data-zone^="corridor-"]').count(),3);
+  await page.locator('#twin-svg [data-zone="stairs-west"]').click();
+  await page.locator('#twin-manual-toggle').click();
+  await page.waitForFunction(() => document.getElementById('twin-work')?.textContent?.includes('수동 작업: 완료'), {timeout:12000});
+  await page.locator('#twin-floor').selectOption('4');
+  await page.waitForFunction(() => document.getElementById('twin-work')?.textContent?.includes('선택 구역'),{timeout:12000});
+  assert.equal(await page.locator('#twin-svg [data-zone^="stairs-"]').count(),2);
+  await page.locator('#twin-floor').selectOption('5');
+  await page.locator('#twin-svg [data-zone="stairs-west"]').waitFor({timeout:12000});
+  await page.locator('#twin-svg [data-zone="stairs-west"]').click();
+  await page.waitForFunction(() => document.getElementById('twin-work')?.textContent?.includes('수동 작업: 완료'),{timeout:12000});
+  await page.locator('#twin-manual-toggle').click();
+  await page.waitForFunction(() => document.getElementById('twin-work')?.textContent?.includes('수동 작업: 미완료'),{timeout:12000});
+  await page.locator('#twin-svg [data-zone="corridor-center"]').click();
+  await page.locator('#twin-start').click();
+  await page.waitForFunction(() => document.getElementById('twin-work')?.textContent?.includes('running'),{timeout:12000});
+  await page.locator('#twin-pause').click();
+  await page.waitForFunction(() => document.getElementById('twin-work')?.textContent?.includes('paused'),{timeout:12000});
+  await page.locator('#twin-reset').click();
+  await page.waitForFunction(() => document.getElementById('twin-work')?.textContent?.includes('수행 중인 가상 청소 없음'),{timeout:12000});
+
   assert.deepEqual(pageErrors,[],'no uncaught browser JS errors');
-  console.log('PASS fleet Playwright: add, select, batch, schedule isolation, archive, JS errors');
+  console.log('PASS fleet & digital twin Playwright: robots, common-area SVG stairwells, manual cleaning, simulated travel, JS errors');
 } finally {
  await context.close();
  await browser.close();
