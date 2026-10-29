@@ -1,0 +1,9 @@
+{
+  "name": "m330-pro-cleaning-web",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun run index.ts"
+  }
+}
