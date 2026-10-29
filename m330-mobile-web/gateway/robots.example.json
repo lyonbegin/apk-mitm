@@ -1,0 +1,21 @@
+{
+  "server": "https://m330-web-github-production.up.railway.app",
+  "robots": [
+    {
+      "name": "M330 Pro 1호기",
+      "host": "192.168.1.101",
+      "device_id": "DEVICE_ID_1",
+      "local_key": "LOCAL_KEY_16CHAR",
+      "protocol": "3.3",
+      "bridge_key": "WEB_PAIRING_KEY_FOR_ROBOT_1"
+    },
+    {
+      "name": "M330 Pro 2호기",
+      "host": "192.168.1.102",
+      "device_id": "DEVICE_ID_2",
+      "local_key": "LOCAL_KEY_16CHAR",
+      "protocol": "3.3",
+      "bridge_key": "WEB_PAIRING_KEY_FOR_ROBOT_2"
+    }
+  ]
+}
