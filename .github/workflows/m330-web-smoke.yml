@@ -82,3 +82,69 @@ jobs:
           curl -fsS -b /tmp/bridge-cookie -X POST "$BASE/api/gateway/revoke" | jq -e '.ok==true'
           curl -fsS -b /tmp/bridge-cookie "$BASE/api/gateway/status" | jq -e '.paired==false and .last_seen==null'
           echo "PASS: read-only bridge pairing, rejected simulation, upload, revoke"
+
+      - name: Verify multiple independent robots and batch commands (demo only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for n in $(seq 1 30); do
+            if curl -fsS --max-time 8 "$BASE/api/health" | jq -e '.version=="0.3.0" and .fleet==true' >/dev/null; then break; fi
+            sleep 3
+          done
+          curl -fsS "$BASE/api/health" | jq -e '.fleet==true and .version=="0.3.0"'
+          jar=/tmp/m330-fleet-cookie
+          curl -fsS -c "$jar" -b "$jar" "$BASE/api/dashboard" > /tmp/fleet-start.json
+          first=$(jq -r '.robots[0].id' /tmp/fleet-start.json)
+          test "$first" != null
+          curl -fsS -c "$jar" -b "$jar" -H 'Content-Type: application/json' \
+            -d '{"name":"검증 2호기","floor_id":"gyeongae-2"}' "$BASE/api/robots" >/tmp/robot2.json
+          second=$(jq -r '.robot.id' /tmp/robot2.json)
+          jq -e '.robot.name=="검증 2호기" and .robot.floor_id=="gyeongae-2"' /tmp/robot2.json
+          curl -fsS -b "$jar" "$BASE/api/dashboard" | jq -e --argjson id "$second" '.robots | length==2 and any(.id==$id)'
+          curl -fsS -b "$jar" -H 'Content-Type: application/json' \
+            -d "{\"robot_id\":$second,\"floor_id\":\"gyeongae-2\",\"time\":\"10:30\",\"weekdays\":\"0,1,2,3,4\"}" \
+            "$BASE/api/tasks" >/tmp/task2.json
+          task=$(jq -r .id /tmp/task2.json)
+          curl -fsS -b "$jar" -H 'Content-Type: application/json' \
+            -d "{\"robot_id\":$first,\"command\":\"start\",\"floor_id\":\"myeonhak-3\"}" \
+            "$BASE/api/command" | jq -e --argjson id "$first" '.simulated==true and .robot_id==$id'
+          curl -fsS -b "$jar" "$BASE/api/dashboard" | jq -e \
+            --argjson first "$first" --argjson second "$second" \
+            '.robots | (map(select(.id==$first))[0].status=="청소 중") and (map(select(.id==$second))[0].status=="대기")'
+          curl -fsS -b "$jar" -H 'Content-Type: application/json' \
+            -d "{\"command\":\"start\",\"robot_ids\":[$first,$second]}" "$BASE/api/commands/batch" | jq -e '.simulated==true and .affected==2'
+          curl -fsS -b "$jar" "$BASE/api/dashboard" | jq -e \
+            --argjson first "$first" --argjson second "$second" --argjson task "$task" \
+            '(.robots | length==2 and all(.status=="청소 중")) and
+             (.tasks | any(.id==$task and .robot_id==$second)) and
+             (.events | any(.robot_id==$first) and any(.robot_id==$second))'
+          curl -fsS -b "$jar" -H 'Content-Type: application/json' \
+            -X PATCH -d '{"name":"검증 2호기 변경","floor_id":"gyeongae-1"}' \
+            "$BASE/api/robots/$second" | jq -e '.robot.name=="검증 2호기 변경" and .robot.floor_id=="gyeongae-1"'
+          curl -fsS -b "$jar" -H 'Content-Type: application/json' -d "{\"robot_id\":$first}" \
+            "$BASE/api/gateway/pair" > /tmp/m330-key-1.json
+          curl -fsS -b "$jar" -H 'Content-Type: application/json' -d "{\"robot_id\":$second}" \
+            "$BASE/api/gateway/pair" > /tmp/m330-key-2.json
+          firstkey=$(jq -r .pair_key /tmp/m330-key-1.json)
+          secondkey=$(jq -r .pair_key /tmp/m330-key-2.json)
+          test "$firstkey" != "$secondkey"
+          curl -fsS -b "$jar" "$BASE/api/gateway/status?robot_id=$first" | jq -e '.paired==true and .online==false'
+          curl -fsS -b "$jar" "$BASE/api/gateway/status?robot_id=$second" | jq -e '.paired==true and .online==false'
+          curl -fsS -H "Content-Type: application/json" -H "X-M330-Pairing-Key: $secondkey" \
+            -d '{"mode":"read_only","connected":false,"raw_dps":{"6":77},"device_ref":"","protocol":""}' \
+            "$BASE/api/gateway/observations" | jq -e --argjson second "$second" '.received and .robot_id==$second'
+          curl -fsS -b "$jar" "$BASE/api/gateway/status?robot_id=$first" | jq -e '.last_seen==null'
+          curl -fsS -b "$jar" "$BASE/api/gateway/status?robot_id=$second" | jq -e '.raw_dps["6"]==77 and .last_seen!=null'
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' \
+            -d "{\"robot_id\":$second,\"command\":\"start\"}" "$BASE/api/command")
+          test "$code" = 404
+          curl -fsS -b "$jar" -X DELETE "$BASE/api/robots/$second" | jq -e '.ok and .archived'
+          curl -fsS -b "$jar" "$BASE/api/dashboard" | jq -e \
+            --argjson first "$first" --argjson second "$second" '.robots | length==1 and .[0].id==$first'
+          curl -fsS -b "$jar" "$BASE/api/dashboard" | jq -e \
+            --argjson second "$second" '.events | any(.robot_id==$second)'
+          curl -fsS -b "$jar" -X DELETE "$BASE/api/tasks/$task" | jq -e '.ok'
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -b "$jar" -X DELETE "$BASE/api/robots/$first")
+          test "$code" = 409
+          curl -fsS -b "$jar" -H 'Content-Type: application/json' -d "{\"robot_id\":$first}" "$BASE/api/gateway/revoke" | jq -e '.ok'
+          echo "PASS: multi-robot CRUD, isolation, per-robot pair keys, batch commands, archive history"
