@@ -35,5 +35,5 @@ jobs:
       - name: Verify mobile fleet and staircase twin UI in local Chromium
         working-directory: m330-mobile-web/tests
         env:
-          M330_BASE: http://127.0.0.1:3000/
+          M330_BASE: http://localhost:3000/
         run: node fleet-playwright.mjs
