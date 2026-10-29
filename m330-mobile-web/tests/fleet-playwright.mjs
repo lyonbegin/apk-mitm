@@ -50,10 +50,10 @@ try {
   await page.locator('#twin-manual-toggle').click();
   await page.waitForFunction(() => document.getElementById('twin-work')?.textContent?.includes('수동 작업: 완료'), {timeout:12000});
   await page.locator('#twin-floor').selectOption('4');
-  await page.waitForFunction(() => document.getElementById('twin-work')?.textContent?.includes('선택 구역'),{timeout:12000});
+  await page.waitForFunction(() => document.getElementById('twin-svg')?.textContent?.includes('면학동 4층'),null,{timeout:12000});
   assert.equal(await page.locator('#twin-svg [data-zone^="stairs-"]').count(),2);
   await page.locator('#twin-floor').selectOption('5');
-  await page.locator('#twin-svg [data-zone="stairs-west"]').waitFor({timeout:12000});
+  await page.waitForFunction(() => document.getElementById('twin-svg')?.textContent?.includes('면학동 5층'),null,{timeout:12000});
   await page.locator('#twin-svg [data-zone="stairs-west"]').click();
   await page.waitForFunction(() => document.getElementById('twin-work')?.textContent?.includes('수동 작업: 완료'),{timeout:12000});
   await page.locator('#twin-manual-toggle').click();
