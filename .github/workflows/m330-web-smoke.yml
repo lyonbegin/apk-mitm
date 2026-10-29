@@ -150,3 +150,53 @@ jobs:
           test "$code" = 409
           curl -fsS -b "$jar" -H 'Content-Type: application/json' -d "{\"robot_id\":$first}" "$BASE/api/gateway/revoke" | jq -e '.ok'
           echo "PASS: multi-robot CRUD, isolation, per-robot pair keys, batch commands, archive history"
+
+      - name: Verify public-only digital twin with stairs and simulated cleaning
+        shell: bash
+        run: |
+          set -euo pipefail
+          for n in $(seq 1 30); do
+            if curl -fsS --max-time 8 "$BASE/api/health" | jq -e '.version=="0.4.0" and .stairs_included==true' >/dev/null; then break; fi
+            sleep 3
+          done
+          curl -fsS "$BASE/api/health" | jq -e '.common_areas_only==true and .stairs_robot_cleanable==false'
+          curl -fsS "$BASE/twin-client.js" | grep -q '공용부 청소 디지털 트윈'
+          curl -fsS "$BASE/twin.css" | grep -q 'twin-stairs'
+          jar=/tmp/twin-cookie
+          curl -fsS -c "$jar" -b "$jar" "$BASE/api/dashboard" > /tmp/twin-before.json
+          robot=$(jq -r '.robots[0].id' /tmp/twin-before.json)
+          for building in myeonhak gyeongae; do
+            for floor in 1 2 3 4 5; do
+              curl -fsS -b "$jar" "$BASE/api/twin/map?floor_id=$building-$floor" | \
+                jq -e '.is_surveyed==false and
+                  ([.zones[] | select(.kind=="stairs")] | length)==2 and
+                  ([.zones[] | select(.kind=="corridor")] | length)==3 and
+                  ([.zones[] | select(.robot_cleanable==false)] | length)==2 and
+                  (.zones | all(.kind!="classroom" and .kind!="office"))'
+            done
+          done
+          curl -fsS -b "$jar" -H 'Content-Type: application/json' \
+            -d '{"floor_id":"myeonhak-5","zone_id":"stairs-west","action":"complete"}' \
+            "$BASE/api/twin/manual" | jq -e '.manual and .completed and .robot_cleaning==false'
+          curl -fsS -b "$jar" "$BASE/api/twin/state?floor_id=myeonhak-5" | \
+            jq -e '.stairs | any(.zone_id=="stairs-west" and .completed)'
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -b "$jar" -H 'Content-Type: application/json' \
+            -d "{\"robot_id\":$robot,\"floor_id\":\"myeonhak-5\",\"zone_id\":\"stairs-west\",\"action\":\"start\"}" \
+            "$BASE/api/twin/command")
+          test "$code" = 422
+          curl -fsS -b "$jar" -H 'Content-Type: application/json' \
+            -d "{\"robot_id\":$robot,\"floor_id\":\"myeonhak-5\",\"zone_id\":\"corridor-center\",\"action\":\"start\"}" \
+            "$BASE/api/twin/command" | jq -e '.simulated==true and .hardware_command==false'
+          curl -fsS -b "$jar" "$BASE/api/twin/state?floor_id=myeonhak-5" | \
+            jq -e --argjson id "$robot" '.runs | any(.robot_id==$id and .zone_id=="corridor-center" and .state=="running")'
+          curl -fsS -b "$jar" -H 'Content-Type: application/json' \
+            -d "{\"robot_id\":$robot,\"action\":\"pause\"}" "$BASE/api/twin/command" | jq -e '.ok'
+          curl -fsS -b "$jar" "$BASE/api/twin/state?floor_id=myeonhak-5" | \
+            jq -e '.runs | any(.state=="paused")'
+          curl -fsS -b "$jar" -H 'Content-Type: application/json' \
+            -d "{\"robot_id\":$robot,\"action\":\"resume\"}" "$BASE/api/twin/command" | jq -e '.ok'
+          curl -fsS -b "$jar" -H 'Content-Type: application/json' \
+            -d "{\"robot_id\":$robot,\"action\":\"reset\"}" "$BASE/api/twin/command" | jq -e '.ok'
+          curl -fsS -b "$jar" -H 'Content-Type: application/json' \
+            -d '{"floor_id":"myeonhak-5","zone_id":"stairs-west","action":"reset"}' "$BASE/api/twin/manual" | jq -e '.completed==false'
+          echo "PASS: ten illustrative floor plans, stair manual workflows, robot restrictions, route simulation"
