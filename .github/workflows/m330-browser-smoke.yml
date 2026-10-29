@@ -1,0 +1,28 @@
+name: M330 Pro fleet browser e2e
+on:
+  push:
+    branches:
+      - m330-pro-mobile-web
+    paths:
+      - 'm330-mobile-web/**'
+      - '.github/workflows/m330-browser-smoke.yml'
+  workflow_dispatch:
+jobs:
+  browser-fleet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright and Chromium
+        working-directory: m330-mobile-web/tests
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Verify live mobile fleet UI
+        working-directory: m330-mobile-web/tests
+        env:
+          M330_BASE: https://m330-web-github-production.up.railway.app/
+        run: node fleet-playwright.mjs
