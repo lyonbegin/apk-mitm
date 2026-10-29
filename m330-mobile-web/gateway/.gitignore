@@ -1,0 +1,5 @@
+robots.json
+secrets*.json
+*.log
+__pycache__/
+*.pyc
