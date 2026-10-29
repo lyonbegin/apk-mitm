@@ -5,7 +5,7 @@
  const ROOT=document.getElementById(VIEW);
  if(!ROOT)return;
  const originalSwitch=window.switchTab;
- const state={map:null,live:null,zoneId:null,fetching:false,selectedRobot:0,notice:''};
+ const state={map:null,live:null,zoneId:null,fetching:false,pending:false,selectedRobot:0,notice:''};
  const esc=(s)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const api=async(path,options)=>{
   const r=await fetch(path,{cache:'no-store',...options});
@@ -156,7 +156,7 @@
   catch(e){alert(e.message);}
  }
  async function refresh(force=false){
-  if(state.fetching)return;
+  if(state.fetching){state.pending=true;return;}
   state.fetching=true;
   try{
    const floorId=currentFloorId();
@@ -165,10 +165,12 @@
     state.zoneId='corridor-center';
     updateSelectors(floorId);
    }
-   state.live=await api('/api/twin/state?floor_id='+encodeURIComponent(floorId));
+   const live=await api('/api/twin/state?floor_id='+encodeURIComponent(floorId));
+   if(currentFloorId()!==floorId){state.map=null;state.pending=true;return;}
+   state.live=live;
    render();
   }catch(e){if(force)alert('가상 지도 갱신 오류: '+e.message);}
-  finally{state.fetching=false;}
+  finally{state.fetching=false;if(state.pending){state.pending=false;refresh(true);}}
  }
  function floorChanged(){
   const id=currentFloorId();
