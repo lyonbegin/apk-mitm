@@ -53,3 +53,32 @@ jobs:
             -d '{"command":"start","floor_id":"myeonhak-3"}' \
             "$BASE/api/command" | jq -e '.simulated==true'
           echo "PASS: UI, persistent SQLite schedule CRUD, cookie isolation, demo-only commands"
+
+      - name: Verify read-only LAN bridge API without a robot
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile m330-mobile-web/gateway/m330_bridge.py
+          python3 m330-mobile-web/gateway/m330_bridge.py --dry-run | jq -e '.would_upload==false and .connected==false'
+          for n in $(seq 1 30); do
+            if curl -fsS --max-time 8 "$BASE/api/health" | jq -e '.gateway_bridge=="read_only"' >/dev/null; then
+              break
+            fi
+            sleep 3
+          done
+          curl -fsS "$BASE/api/health" | jq -e '.gateway_bridge=="read_only"'
+          curl -fsS -c /tmp/bridge-cookie -b /tmp/bridge-cookie "$BASE/api/dashboard" >/dev/null
+          curl -fsS -c /tmp/bridge-cookie -b /tmp/bridge-cookie -X POST "$BASE/api/gateway/pair" > /tmp/bridge-key.json
+          key=$(jq -r '.pair_key' /tmp/bridge-key.json)
+          test "${#key}" = 64
+          curl -fsS -b /tmp/bridge-cookie "$BASE/api/gateway/status" | jq -e '.paired==true and .online==false'
+          curl -fsS -X POST -H "Content-Type: application/json" -H "X-M330-Pairing-Key: $key" \
+            -d '{"mode":"read_only","connected":false,"raw_dps":{},"device_ref":"","protocol":""}' \
+            "$BASE/api/gateway/observations" | jq -e '.received==true and .interpreted==false'
+          curl -fsS -b /tmp/bridge-cookie "$BASE/api/gateway/status" | jq -e '.paired==true and .online==false and .last_seen!=null'
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H "Content-Type: application/json" \
+            -H "X-M330-Pairing-Key: $key" -d '{"mode":"simulation","connected":true,"raw_dps":{}}' "$BASE/api/gateway/observations")
+          test "$code" = 422
+          curl -fsS -b /tmp/bridge-cookie -X POST "$BASE/api/gateway/revoke" | jq -e '.ok==true'
+          curl -fsS -b /tmp/bridge-cookie "$BASE/api/gateway/status" | jq -e '.paired==false and .last_seen==null'
+          echo "PASS: read-only bridge pairing, rejected simulation, upload, revoke"
