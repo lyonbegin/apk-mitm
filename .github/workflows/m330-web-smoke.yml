@@ -21,6 +21,8 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m py_compile m330-mobile-web/gateway/m330_lan_probe.py
+          python3 -m py_compile m330-mobile-web/gateway/m330_fleet_bridge.py
+          python3 m330-mobile-web/gateway/m330_fleet_bridge.py --dry-run | jq -e '.mode=="simulation" and .devices_contacted==0 and .uploads==0'
           python3 m330-mobile-web/gateway/m330_lan_probe.py --simulate > /tmp/gateway.json
           jq -e '.mode == "simulation" and .command_writes_enabled == false' /tmp/gateway.json
           python3 m330-mobile-web/gateway/m330_lan_probe.py --help | grep -q '\-\-probe'
