@@ -176,9 +176,12 @@ Bun.serve({port:Number(Bun.env.PORT||3000),hostname:'0.0.0.0',async fetch(req){
    .run(match.robot_id,new Date().toISOString(),d.connected?1:0,ref,protocol,JSON.stringify(dps));
   return json({ok:true,received:true,robot_id:match.robot_id,read_only:true,interpreted:false});
  }
+ if(req.method==='GET'&&p==='/twin-client.js')return new Response(await Bun.file(new URL('./twin-client.js',import.meta.url)).text(),{headers:{'Content-Type':'text/javascript; charset=utf-8','Cache-Control':'no-store'}});
+ if(req.method==='GET'&&p==='/twin.css')return new Response(await Bun.file(new URL('./twin.css',import.meta.url)).text(),{headers:{'Content-Type':'text/css; charset=utf-8','Cache-Control':'no-store'}});
  if(req.method==='GET'&&p==='/')return new Response(
   PAGE.replace('<div class="panel"><p><b>M330 Pro 모바일 웹 v0.3',BRIDGE_PANEL+'<div class="panel"><p><b>M330 Pro 모바일 웹 v0.3')
-    .replace('</body>',BRIDGE_SCRIPT+'</body>'),
+    .replace('</head>','<link rel="stylesheet" href="/twin.css"></head>')
+    .replace('</body>',BRIDGE_SCRIPT+'<script defer src="/twin-client.js"></script></body>'),
   {headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...cookie}});
  if(!p.startsWith('/api/'))return bad('경로를 찾을 수 없습니다.',404);
  ensureSession(sid);
