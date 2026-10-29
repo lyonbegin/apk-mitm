@@ -17,6 +17,7 @@
  ROOT.innerHTML='<div class="over">SCHOOL DIGITAL TWIN / COMMON AREAS</div>'
   +'<h1 class="twin-title">공용부 청소 디지털 트윈</h1>'
   +'<p class="muted">실측 도면이 아닌 층별 가상 평면도입니다. 교실·행정실 등 내부 공간은 제외하며, 복도·공용 홀·출입구·계단을 포함합니다.</p>'
+  +'<p class="twin-help" style="margin:0">현재 지도: <b id="map-floor">면학동 5층</b> · 가상 공용부</p>'
   +'<div class="twin-filter"><label>건물<select id="twin-building">'+buildOptions+'</select></label>'
   +'<label>층<select id="'+ID+'"><option value="5">5층</option><option value="4">4층</option><option value="3">3층</option><option value="2">2층</option><option value="1">1층</option></select></label></div>'
   +'<div id="twin-overview" class="twin-overview"></div>'
