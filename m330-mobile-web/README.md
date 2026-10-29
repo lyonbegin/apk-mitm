@@ -1,6 +1,8 @@
-# Lefant M330 Pro 모바일 청소관리 웹 v0.2
+# Lefant M330 Pro 다중 로봇 모바일 청소관리 웹 v0.3
 
 **현재 운영 URL:** https://m330-web-github-production.up.railway.app/
+
+**다중 로봇 운영 절차와 API:** [FLEET.md](./FLEET.md) — 로봇별 관리, 일괄 데모 명령, 개별 연결키, LAN 진단 및 테스트.
 
 ## 배포
 - GitHub 저장소: `lyonbegin/apk-mitm`, 브랜치 `m330-pro-mobile-web`
