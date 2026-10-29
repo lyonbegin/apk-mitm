@@ -1,0 +1,8 @@
+{
+  "name": "m330-fleet-browser-smoke",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "playwright": "1.56.1"
+  }
+}
