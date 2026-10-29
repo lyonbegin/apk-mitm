@@ -146,7 +146,7 @@ Bun.serve({port:Number(Bun.env.PORT||3000),hostname:'0.0.0.0',async fetch(req){
     .run(matched.session_id,new Date().toISOString(),payload.connected?1:0,ref,protocol,JSON.stringify(dps));
    return json({ok:true,received:true,read_only:true,interpreted:false});
  }
- if(p==='/api/health'&&req.method==='GET')return json({ok:true,service:'m330-pro-mobile-web',mode:'demo',storage:'sqlite',at:new Date().toISOString()});
+ if(p==='/api/health'&&req.method==='GET')return json({ok:true,service:'m330-pro-mobile-web',mode:'demo',gateway_bridge:'read_only',storage:'sqlite',at:new Date().toISOString()});
  if(p==='/api/dashboard'&&req.method==='GET')return json({mode:'demo',robot,buildings,tasks:taskList.all(sid),events:eventList.all(sid),demo_controls_enabled:true,real_control_enabled:false,gateway:getGateway(sid),features:{map:'not_integrated',schedules:'planning_only',real_write_verified:false,storage:'persistent_sqlite'},updated_at:new Date().toISOString()});
  if(p==='/api/diagnostics'&&req.method==='GET')return json({mode:'demo',robot_connected:false,map_connected:false,real_command_available:false,storage:'persistent_sqlite',gateway:getGateway(sid),note:'No hardware command protocols verified; LAN gateway is read-only.'});
  if(p==='/api/command'&&req.method==='POST'){
