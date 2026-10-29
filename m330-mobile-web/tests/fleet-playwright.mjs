@@ -33,6 +33,7 @@ try {
   await page.locator('#robot-select').selectOption(String(firstId));
   await page.waitForFunction(() => document.getElementById('robot-label')?.textContent?.includes('로봇 01'), {timeout:10000});
   await page.locator('[data-nav="tasks"]').click();
+  await page.waitForFunction(() => !document.getElementById('task-list')?.textContent?.includes('10:15'),null,{timeout:12000});
   assert.ok(!(await page.locator('#task-list').textContent()).includes('10:15'),'schedule must remain isolated to second robot');
   await page.locator('[data-nav="home"]').click();
   await page.locator('#robot-select').selectOption(String(secondId));
