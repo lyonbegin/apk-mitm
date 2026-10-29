@@ -69,115 +69,204 @@ db.exec('PRAGMA busy_timeout=5000');
 db.exec("CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,status TEXT NOT NULL DEFAULT '대기',battery INTEGER NOT NULL DEFAULT 82,floor_id TEXT,created_at TEXT NOT NULL)");
 db.exec("CREATE TABLE IF NOT EXISTS tasks(id INTEGER PRIMARY KEY AUTOINCREMENT,session_id TEXT NOT NULL,floor_id TEXT NOT NULL,time TEXT NOT NULL,weekdays TEXT NOT NULL,building_name TEXT NOT NULL,floor_name TEXT NOT NULL,enabled INTEGER NOT NULL DEFAULT 1)");
 db.exec("CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT,session_id TEXT NOT NULL,at TEXT NOT NULL,title TEXT NOT NULL,detail TEXT NOT NULL,simulated INTEGER NOT NULL DEFAULT 1)");
-db.exec("CREATE INDEX IF NOT EXISTS idx_tasks_session ON tasks(session_id,id)");
-db.exec("CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id,id)");
 db.exec("CREATE TABLE IF NOT EXISTS gateway_pairs(session_id TEXT PRIMARY KEY,token_hash TEXT UNIQUE NOT NULL,created_at TEXT NOT NULL)");
 db.exec("CREATE TABLE IF NOT EXISTS gateway_observations(session_id TEXT PRIMARY KEY,last_seen TEXT NOT NULL,connected INTEGER NOT NULL,device_ref TEXT NOT NULL,protocol TEXT NOT NULL,raw_dps TEXT NOT NULL)");
+db.exec("CREATE TABLE IF NOT EXISTS robots(id INTEGER PRIMARY KEY AUTOINCREMENT,session_id TEXT NOT NULL,name TEXT NOT NULL,floor_id TEXT NOT NULL,active INTEGER NOT NULL DEFAULT 1,demo_status TEXT NOT NULL DEFAULT '대기',demo_battery INTEGER NOT NULL DEFAULT 82,created_at TEXT NOT NULL)");
+db.exec("CREATE INDEX IF NOT EXISTS idx_robots_session ON robots(session_id,active,id)");
+db.exec("CREATE TABLE IF NOT EXISTS robot_pairs(robot_id INTEGER PRIMARY KEY,token_hash TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL)");
+db.exec("CREATE TABLE IF NOT EXISTS robot_observations(robot_id INTEGER PRIMARY KEY,last_seen TEXT NOT NULL,connected INTEGER NOT NULL,device_ref TEXT NOT NULL,protocol TEXT NOT NULL,raw_dps TEXT NOT NULL)");
+function ensureColumn(table:string,column:string){
+ const names=db.query('PRAGMA table_info('+table+')').all() as Array<{name:string}>;
+ if(!names.some(x=>x.name===column)) db.exec('ALTER TABLE '+table+' ADD COLUMN '+column+' INTEGER');
+}
+ensureColumn('tasks','robot_id');
+ensureColumn('events','robot_id');
+db.exec("CREATE INDEX IF NOT EXISTS idx_tasks_robot ON tasks(session_id,robot_id,id)");
+db.exec("CREATE INDEX IF NOT EXISTS idx_events_robot ON events(session_id,robot_id,id)");
 const validFloors=new Set(buildings.flatMap(b=>b.floors.map(f=>f.id)));
 const tokenHash=(v:string)=>createHash('sha256').update(v).digest('hex');
-const getGateway=(sid:string)=>{
- const pair=db.query('SELECT session_id FROM gateway_pairs WHERE session_id=?').get(sid);
- const obs=db.query('SELECT last_seen,connected,device_ref,protocol,raw_dps FROM gateway_observations WHERE session_id=?').get(sid) as any;
+const floorLabel=(floorId:string)=>{const b=buildings.find(x=>floorId.startsWith(x.id+'-'));return b?b.name+' '+floorId.split('-')[1]+'층':'미배치';};
+const robotsOf=(sid:string)=>db.query('SELECT * FROM robots WHERE session_id=? AND active=1 ORDER BY id ASC').all(sid) as any[];
+const lookupRobot=(sid:string,id:any)=>{
+ if(id===undefined||id===null||id===''){
+  return db.query('SELECT * FROM robots WHERE session_id=? AND active=1 ORDER BY id ASC LIMIT 1').get(sid) as any;
+ }
+ if(!Number.isSafeInteger(Number(id))||Number(id)<1)return null;
+ return db.query('SELECT * FROM robots WHERE session_id=? AND active=1 AND id=?').get(sid,Number(id)) as any;
+};
+function ensureSession(sid:string){
+ let row=db.query('SELECT * FROM sessions WHERE id=?').get(sid) as any;
+ if(!row){
+  db.query('INSERT OR IGNORE INTO sessions(id,created_at) VALUES(?,?)').run(sid,new Date().toISOString());
+  row=db.query('SELECT * FROM sessions WHERE id=?').get(sid) as any;
+ }
+ if(!robotsOf(sid).length){
+  // One initial demo entry. Legacy tasks and simulated status are preserved.
+  const old=db.query('SELECT COUNT(*) AS n FROM robots WHERE session_id=?').get(sid) as any;
+  if(old.n===0) {
+   const floor=validFloors.has(row.floor_id)?row.floor_id:'myeonhak-5';
+   const add=db.query('INSERT INTO robots(session_id,name,floor_id,demo_status,demo_battery,created_at) VALUES(?,?,?,?,?,?)').run(sid,'로봇 01',floor,row.status,Number(row.battery),new Date().toISOString());
+   const id=Number(add.lastInsertRowid);
+   db.query('UPDATE tasks SET robot_id=? WHERE session_id=? AND robot_id IS NULL').run(id,sid);
+   db.query('UPDATE events SET robot_id=? WHERE session_id=? AND robot_id IS NULL').run(id,sid);
+   db.query('INSERT OR IGNORE INTO robot_pairs(robot_id,token_hash,created_at) SELECT ?,token_hash,created_at FROM gateway_pairs WHERE session_id=?').run(id,sid);
+   db.query('INSERT OR IGNORE INTO robot_observations(robot_id,last_seen,connected,device_ref,protocol,raw_dps) SELECT ?,last_seen,connected,device_ref,protocol,raw_dps FROM gateway_observations WHERE session_id=?').run(id,sid);
+  }
+ }
+}
+function cookieSession(req:Request){
+ const m=(req.headers.get('cookie')||'').match(/(?:^|;\s*)m330_session=([0-9a-f-]{36})(?:;|$)/i);
+ return {sid:m?m[1]:crypto.randomUUID(),fresh:!m};
+}
+function getGateway(id:number){
+ const pair=db.query('SELECT robot_id FROM robot_pairs WHERE robot_id=?').get(id);
+ const obs=db.query('SELECT last_seen,connected,device_ref,protocol,raw_dps FROM robot_observations WHERE robot_id=?').get(id) as any;
  const age=obs?Math.max(0,Math.round((Date.now()-Date.parse(obs.last_seen))/1000)):null;
  return {paired:!!pair,online:!!obs&&obs.connected===1&&age!==null&&age<=90,
   last_seen:obs?.last_seen||null,age_seconds:age,device_ref:obs?.device_ref||null,
   protocol:obs?.protocol||null,raw_dps:obs?JSON.parse(obs.raw_dps):null,
   verification:'read_only_unmapped',commands_enabled:false};
+}
+function exposeRobot(r:any){
+ return {id:r.id,name:r.name,floor_id:r.floor_id,floor_name:floorLabel(r.floor_id),status:r.demo_status,battery:r.demo_battery,
+  connected:false,is_simulated:true,is_hardware_verified:false,gateway:getGateway(r.id)};
+}
+const readJson=async(req:Request)=>{
+ const text=await req.text();
+ if(text.length>32768)throw Error('요청 크기 초과');
+ return JSON.parse(text);
 };
-
-function state(sid){
- let r=db.query('SELECT status,battery,floor_id FROM sessions WHERE id=?').get(sid);
- if(!r){
-   db.query('INSERT OR IGNORE INTO sessions(id,created_at) VALUES(?,?)').run(sid,new Date().toISOString());
-   r=db.query('SELECT status,battery,floor_id FROM sessions WHERE id=?').get(sid);
-   db.query('INSERT INTO events(session_id,at,title,detail) VALUES(?,?,?,?)').run(sid,new Date().toISOString(),'데모 접속','실제 로봇 미연결');
- }
- return {status:r.status,battery:r.battery,floor_id:r.floor_id,connected:false,is_simulated:true,is_hardware_verified:false};
-}
-function cookieSession(req){
- const m=(req.headers.get('cookie')||'').match(/(?:^|;\s*)m330_session=([0-9a-f-]{36})(?:;|$)/i);
- return {sid:m?m[1]:crypto.randomUUID(),fresh:!m};
-}
-const taskList=db.query('SELECT * FROM tasks WHERE session_id=? ORDER BY id DESC LIMIT 150');
-const eventList=db.query('SELECT * FROM events WHERE session_id=? ORDER BY id DESC LIMIT 150');
+function messageError(e:unknown){return e instanceof Error&&e.message==='요청 크기 초과'?'요청 크기 초과':'JSON 형식 오류';}
 Bun.serve({port:Number(Bun.env.PORT||3000),hostname:'0.0.0.0',async fetch(req){
  const u=new URL(req.url),p=u.pathname;
  const {sid,fresh}=cookieSession(req);
  const cookie=fresh&&p!=='/api/gateway/observations'?{'Set-Cookie':'m330_session='+sid+'; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000'}:{};
- const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store',...cookie}});
- const bad=(detail,status=400)=>json({detail},status);
- const robot=p==='/api/dashboard'||p==='/api/command'?state(sid):null;
- if(p==='/'&&req.method==='GET')return new Response(
+ const json=(data:any,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store',...cookie}});
+ const bad=(detail:string,status=400)=>json({detail},status);
+ if(p==='/api/health'&&req.method==='GET')return json({ok:true,service:'m330-pro-mobile-web',version:'0.3.0',mode:'demo',fleet:true,gateway_bridge:'read_only',storage:'sqlite',at:new Date().toISOString()});
+ // Ingest observation with a per-robot secret, never an operator cookie.
+ if(p==='/api/gateway/observations'&&req.method==='POST'){
+  const token=req.headers.get('X-M330-Pairing-Key')||'';
+  if(!/^[a-f0-9]{64}$/.test(token))return bad('유효하지 않은 브리지 키',401);
+  const match=db.query('SELECT p.robot_id FROM robot_pairs p JOIN robots r ON r.id=p.robot_id WHERE p.token_hash=? AND r.active=1').get(tokenHash(token)) as any;
+  if(!match)return bad('연결되지 않은 브리지 키',401);
+  let d:any;try{d=await readJson(req)}catch(e){return bad(messageError(e),400)}
+  if(!d||d.mode!=='read_only'||typeof d.connected!=='boolean'||!d.raw_dps||typeof d.raw_dps!=='object'||Array.isArray(d.raw_dps))return bad('읽기 전용 관측 데이터만 수신합니다.',422);
+  const dps:Record<string,unknown>={};
+  for(const [k,v] of Object.entries(d.raw_dps).slice(0,80)){
+   if(!/^\d{1,4}$/.test(k))continue;
+   if(v===null||typeof v==='boolean'||typeof v==='number'&&Number.isFinite(v))dps[k]=v;
+   else if(typeof v==='string')dps[k]=v.slice(0,160);
+  }
+  const ref=typeof d.device_ref==='string'&&/^[a-f0-9]{12}$/.test(d.device_ref)?d.device_ref:'';
+  const protocol=typeof d.protocol==='string'&&/^(3\.[1-5])$/.test(d.protocol)?d.protocol:'';
+  // Never accept a second hardware identity for an already paired robot.
+  const old=db.query('SELECT device_ref FROM robot_observations WHERE robot_id=?').get(match.robot_id) as any;
+  if(old?.device_ref&&ref&&old.device_ref!==ref)return bad('등록된 로봇과 장치 지문이 일치하지 않습니다. 연결을 재설정하십시오.',409);
+  db.query('INSERT INTO robot_observations(robot_id,last_seen,connected,device_ref,protocol,raw_dps) VALUES(?,?,?,?,?,?) ON CONFLICT(robot_id) DO UPDATE SET last_seen=excluded.last_seen,connected=excluded.connected,device_ref=excluded.device_ref,protocol=excluded.protocol,raw_dps=excluded.raw_dps')
+   .run(match.robot_id,new Date().toISOString(),d.connected?1:0,ref,protocol,JSON.stringify(dps));
+  return json({ok:true,received:true,robot_id:match.robot_id,read_only:true,interpreted:false});
+ }
+ if(req.method==='GET'&&p==='/')return new Response(
   PAGE.replace('<div class="panel"><p><b>M330 Pro 모바일 웹 v0.2',BRIDGE_PANEL+'<div class="panel"><p><b>M330 Pro 모바일 웹 v0.2')
-      .replace('</body>',BRIDGE_SCRIPT+'</body>'),{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...cookie}});
- if(p==='/api/gateway/status'&&req.method==='GET')return json(getGateway(sid));
+    .replace('</body>',BRIDGE_SCRIPT+'</body>'),
+  {headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...cookie}});
+ if(!p.startsWith('/api/'))return bad('경로를 찾을 수 없습니다.',404);
+ ensureSession(sid);
+ if(req.method==='GET'&&p==='/api/robots')return json({robots:robotsOf(sid).map(exposeRobot),real_control_enabled:false});
+ if(req.method==='POST'&&p==='/api/robots'){
+  let d:any;try{d=await readJson(req)}catch(e){return bad(messageError(e))}
+  if(robotsOf(sid).length>=100)return bad('로봇은 최대 100대까지 등록할 수 있습니다.',429);
+  if(typeof d?.name!=='string'||!d.name.trim()||d.name.trim().length>40)return bad('로봇 이름은 1~40자여야 합니다.',422);
+  if(!validFloors.has(d.floor_id))return bad('배치 층을 선택하십시오.',422);
+  const name=d.name.trim(),existing=robotsOf(sid);
+  if(existing.some(x=>x.name===name))return bad('같은 이름의 로봇이 이미 있습니다.',409);
+  const r=db.query('INSERT INTO robots(session_id,name,floor_id,created_at) VALUES(?,?,?,?)').run(sid,name,d.floor_id,new Date().toISOString());
+  return json({ok:true,robot:exposeRobot(lookupRobot(sid,Number(r.lastInsertRowid)))},201);
+ }
+ const rm=p.match(/^\/api\/robots\/(\d+)$/);
+ if(rm&&req.method==='PATCH'){
+  const r=lookupRobot(sid,Number(rm[1]));if(!r)return bad('로봇을 찾을 수 없습니다.',404);
+  let d:any;try{d=await readJson(req)}catch(e){return bad(messageError(e))}
+  const name=d.name===undefined?r.name:d.name, floor=d.floor_id===undefined?r.floor_id:d.floor_id;
+  if(typeof name!=='string'||!name.trim()||name.trim().length>40)return bad('로봇 이름은 1~40자여야 합니다.',422);
+  if(!validFloors.has(floor))return bad('배치 층이 올바르지 않습니다.',422);
+  if(robotsOf(sid).some(x=>x.id!==r.id&&x.name===name.trim()))return bad('같은 이름의 로봇이 이미 있습니다.',409);
+  db.query('UPDATE robots SET name=?,floor_id=? WHERE id=? AND session_id=?').run(name.trim(),floor,r.id,sid);
+  return json({ok:true,robot:exposeRobot(lookupRobot(sid,r.id))});
+ }
+ if(rm&&req.method==='DELETE'){
+  const r=lookupRobot(sid,Number(rm[1]));if(!r)return bad('로봇을 찾을 수 없습니다.',404);
+  if(robotsOf(sid).length<=1)return bad('마지막 로봇은 해제할 수 없습니다.',409);
+  db.query('UPDATE robots SET active=0 WHERE id=? AND session_id=?').run(r.id,sid);
+  db.query('DELETE FROM robot_pairs WHERE robot_id=?').run(r.id);
+  db.query('DELETE FROM robot_observations WHERE robot_id=?').run(r.id);
+  return json({ok:true,archived:true,note:'이전 작업 기록은 보존됩니다.'});
+ }
+ if(p==='/api/gateway/status'&&req.method==='GET'){
+  const r=lookupRobot(sid,u.searchParams.get('robot_id'));return r?json({robot_id:r.id,...getGateway(r.id)}):bad('로봇을 찾을 수 없습니다.',404);
+ }
  if(p==='/api/gateway/pair'&&req.method==='POST'){
-   state(sid);
-   const key=randomBytes(32).toString('hex');
-   db.query('INSERT INTO gateway_pairs(session_id,token_hash,created_at) VALUES(?,?,?) ON CONFLICT(session_id) DO UPDATE SET token_hash=excluded.token_hash,created_at=excluded.created_at').run(sid,tokenHash(key),new Date().toISOString());
-   db.query('DELETE FROM gateway_observations WHERE session_id=?').run(sid);
-   return json({ok:true,pair_key:key,mode:'read_only',note:'키는 다시 조회할 수 없습니다.'});
+  let d:any={};try{d=await readJson(req)}catch{ /* Legacy empty POST body */ }
+  const r=lookupRobot(sid,d?.robot_id);if(!r)return bad('로봇을 찾을 수 없습니다.',404);
+  const key=randomBytes(32).toString('hex');
+  db.query('INSERT INTO robot_pairs(robot_id,token_hash,created_at) VALUES(?,?,?) ON CONFLICT(robot_id) DO UPDATE SET token_hash=excluded.token_hash,created_at=excluded.created_at').run(r.id,tokenHash(key),new Date().toISOString());
+  db.query('DELETE FROM robot_observations WHERE robot_id=?').run(r.id);
+  return json({ok:true,robot_id:r.id,pair_key:key,mode:'read_only',note:'연결키는 1회만 표시되며 해당 로봇에서만 사용할 수 있습니다.'});
  }
  if(p==='/api/gateway/revoke'&&req.method==='POST'){
-   db.query('DELETE FROM gateway_pairs WHERE session_id=?').run(sid);
-   db.query('DELETE FROM gateway_observations WHERE session_id=?').run(sid);
-   return json({ok:true});
+  let d:any={};try{d=await readJson(req)}catch{}
+  const r=lookupRobot(sid,d?.robot_id);if(!r)return bad('로봇을 찾을 수 없습니다.',404);
+  db.query('DELETE FROM robot_pairs WHERE robot_id=?').run(r.id);
+  db.query('DELETE FROM robot_observations WHERE robot_id=?').run(r.id);
+  return json({ok:true,robot_id:r.id});
  }
- if(p==='/api/gateway/observations'&&req.method==='POST'){
-   const token=req.headers.get('X-M330-Pairing-Key')||'';
-   if(!/^[a-f0-9]{64}$/.test(token))return bad('유효하지 않은 브리지 키',401);
-   const matched=db.query('SELECT session_id FROM gateway_pairs WHERE token_hash=?').get(tokenHash(token)) as any;
-   if(!matched)return bad('연결되지 않은 브리지 키',401);
-   let payload:any;
-   try{
-     const body=await req.text();if(body.length>32000)return bad('관측 데이터 크기 초과',413);
-     payload=JSON.parse(body);
-   }catch{return bad('관측 JSON 형식 오류',400)}
-   if(!payload||payload.mode!=='read_only'||typeof payload.connected!=='boolean'||!payload.raw_dps||typeof payload.raw_dps!=='object'||Array.isArray(payload.raw_dps))return bad('읽기 전용 관측 데이터만 수신합니다.',422);
-   const dps:Record<string,unknown>={};
-   for(const [k,v] of Object.entries(payload.raw_dps).slice(0,80)){
-     if(!/^\d{1,4}$/.test(k))continue;
-     if(v===null||typeof v==='boolean'||typeof v==='number'&&Number.isFinite(v))dps[k]=v;
-     else if(typeof v==='string')dps[k]=v.slice(0,160);
-   }
-   const ref=typeof payload.device_ref==='string'&&/^[a-f0-9]{12}$/.test(payload.device_ref)?payload.device_ref:'';
-   const protocol=typeof payload.protocol==='string'&&/^(3\.[1-5])$/.test(payload.protocol)?payload.protocol:'';
-   db.query('INSERT INTO gateway_observations(session_id,last_seen,connected,device_ref,protocol,raw_dps) VALUES(?,?,?,?,?,?) ON CONFLICT(session_id) DO UPDATE SET last_seen=excluded.last_seen,connected=excluded.connected,device_ref=excluded.device_ref,protocol=excluded.protocol,raw_dps=excluded.raw_dps')
-    .run(matched.session_id,new Date().toISOString(),payload.connected?1:0,ref,protocol,JSON.stringify(dps));
-   return json({ok:true,received:true,read_only:true,interpreted:false});
+ if(p==='/api/dashboard'&&req.method==='GET'){
+  const list=robotsOf(sid), selected=lookupRobot(sid,u.searchParams.get('robot_id'));
+  const robot=selected?exposeRobot(selected):null;
+  const tasks=db.query('SELECT t.*,r.name AS robot_name FROM tasks t JOIN robots r ON r.id=t.robot_id WHERE t.session_id=? AND r.active=1 ORDER BY t.id DESC LIMIT 300').all(sid);
+  const events=db.query('SELECT e.*,r.name AS robot_name FROM events e JOIN robots r ON r.id=e.robot_id WHERE e.session_id=? ORDER BY e.id DESC LIMIT 300').all(sid);
+  return json({mode:'demo',fleet:true,robot,robots:list.map(exposeRobot),buildings,tasks,events,
+   demo_controls_enabled:true,real_control_enabled:false,gateway:robot?.gateway||null,
+   features:{map:'not_integrated',schedules:'planning_only',real_write_verified:false,storage:'persistent_sqlite'},updated_at:new Date().toISOString()});
  }
- if(p==='/api/health'&&req.method==='GET')return json({ok:true,service:'m330-pro-mobile-web',mode:'demo',gateway_bridge:'read_only',storage:'sqlite',at:new Date().toISOString()});
- if(p==='/api/dashboard'&&req.method==='GET')return json({mode:'demo',robot,buildings,tasks:taskList.all(sid),events:eventList.all(sid),demo_controls_enabled:true,real_control_enabled:false,gateway:getGateway(sid),features:{map:'not_integrated',schedules:'planning_only',real_write_verified:false,storage:'persistent_sqlite'},updated_at:new Date().toISOString()});
- if(p==='/api/diagnostics'&&req.method==='GET')return json({mode:'demo',robot_connected:false,map_connected:false,real_command_available:false,storage:'persistent_sqlite',gateway:getGateway(sid),note:'No hardware command protocols verified; LAN gateway is read-only.'});
+ if(p==='/api/diagnostics'&&req.method==='GET'){
+  const r=lookupRobot(sid,u.searchParams.get('robot_id'));
+  return r?json({robot_id:r.id,mode:'demo',robot_connected:false,map_connected:false,real_command_available:false,storage:'persistent_sqlite',gateway:getGateway(r.id),note:'Read-only LAN status only; no verified robot commands.'}):bad('로봇을 찾을 수 없습니다.',404);
+ }
  if(p==='/api/command'&&req.method==='POST'){
-   let d;try{d=await req.json()}catch{return bad('JSON 형식 오류')};
-   const labels={start:'청소 시작',pause:'일시정지',dock:'충전 복귀'};
-   if(typeof d!=='object'||!d||!Object.prototype.hasOwnProperty.call(labels,d.command))return bad('지원하지 않는 명령');
-   if(d.command==='start'&&!validFloors.has(d.floor_id))return bad('청소할 층을 선택해 주세요.',422);
-   let status=robot.status,battery=robot.battery,floor=robot.floor_id;
-   if(d.command==='start'){status='청소 중';floor=d.floor_id;battery=Math.max(0,battery-1);}
-   if(d.command==='pause')status='일시정지';
-   if(d.command==='dock')status='충전 복귀 중';
-   db.query('UPDATE sessions SET status=?,battery=?,floor_id=? WHERE id=?').run(status,battery,floor,sid);
-   db.query('INSERT INTO events(session_id,at,title,detail,simulated) VALUES(?,?,?,?,1)').run(sid,new Date().toLocaleString('ko-KR',{timeZone:'Asia/Seoul'}),labels[d.command],(floor||'현재 작업')+' · 가상 명령');
-   return json({ok:true,simulated:true,message:labels[d.command]+' — 시뮬레이션만 실행했습니다.'});
+  let d:any;try{d=await readJson(req)}catch(e){return bad(messageError(e))}
+  const r=lookupRobot(sid,d?.robot_id);if(!r)return bad('로봇을 찾을 수 없습니다.',404);
+  const labels:any={start:'청소 시작',pause:'일시정지',dock:'충전 복귀'};
+  if(!Object.hasOwn(labels,d.command))return bad('지원하지 않는 명령');
+  const floor=d.floor_id||r.floor_id;
+  if(d.command==='start'&&!validFloors.has(floor))return bad('청소할 층을 선택해 주세요.',422);
+  let status=r.demo_status,battery=r.demo_battery;
+  if(d.command==='start'){status='청소 중';battery=Math.max(0,battery-1);}
+  if(d.command==='pause')status='일시정지';
+  if(d.command==='dock')status='충전 복귀 중';
+  db.query('UPDATE robots SET demo_status=?,demo_battery=? WHERE id=? AND session_id=?').run(status,battery,r.id,sid);
+  db.query('INSERT INTO events(session_id,robot_id,at,title,detail,simulated) VALUES(?,?,?,?,?,1)')
+   .run(sid,r.id,new Date().toLocaleString('ko-KR',{timeZone:'Asia/Seoul'}),labels[d.command],r.name+' / '+floorLabel(floor)+' · 가상 명령');
+  return json({ok:true,robot_id:r.id,simulated:true,message:r.name+': '+labels[d.command]+' — 시뮬레이션만 실행했습니다.'});
  }
  if(p==='/api/tasks'&&req.method==='POST'){
-   let d;try{d=await req.json()}catch{return bad('JSON 형식 오류')};
-   if(!d||!validFloors.has(d.floor_id))return bad('청소구역이 올바르지 않습니다.',422);
-   if(typeof d.time!=='string'||!/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(d.time))return bad('시간 형식 오류',422);
-   const days=String(d.weekdays||'');
-   if(!/^[0-6](?:,[0-6]){0,6}$/.test(days))return bad('요일 형식 오류',422);
-   if(db.query('SELECT COUNT(*) AS count FROM tasks WHERE session_id=?').get(sid).count>=100)return bad('일정 등록 한도에 도달했습니다.',429);
-   const bd=buildings.find(b=>d.floor_id.startsWith(b.id+'-'));
-   const data={floor_id:d.floor_id,time:d.time,weekdays:days,building_name:bd.name,floor_name:d.floor_id.split('-')[1]+'층',enabled:1};
-   const r=db.query('INSERT INTO tasks(session_id,floor_id,time,weekdays,building_name,floor_name,enabled) VALUES(?,?,?,?,?,?,1)').run(sid,data.floor_id,data.time,data.weekdays,data.building_name,data.floor_name);
-   return json({id:Number(r.lastInsertRowid),...data},201);
+  let d:any;try{d=await readJson(req)}catch(e){return bad(messageError(e))}
+  const r=lookupRobot(sid,d?.robot_id);if(!r)return bad('로봇을 찾을 수 없습니다.',404);
+  if(!validFloors.has(d.floor_id))return bad('청소구역이 올바르지 않습니다.',422);
+  if(typeof d.time!=='string'||!/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(d.time))return bad('시간 형식 오류',422);
+  const days=String(d.weekdays||'');
+  if(!/^[0-6](?:,[0-6]){0,6}$/.test(days))return bad('요일 형식 오류',422);
+  if((db.query('SELECT COUNT(*) AS count FROM tasks WHERE session_id=?').get(sid) as any).count>=500)return bad('일정 등록 한도에 도달했습니다.',429);
+  const b=buildings.find(x=>d.floor_id.startsWith(x.id+'-'))!;
+  const obj={robot_id:r.id,robot_name:r.name,floor_id:d.floor_id,time:d.time,weekdays:days,building_name:b.name,floor_name:d.floor_id.split('-')[1]+'층',enabled:1};
+  const result=db.query('INSERT INTO tasks(session_id,robot_id,floor_id,time,weekdays,building_name,floor_name,enabled) VALUES(?,?,?,?,?,?,?,1)')
+   .run(sid,r.id,obj.floor_id,obj.time,obj.weekdays,obj.building_name,obj.floor_name);
+  return json({id:Number(result.lastInsertRowid),...obj},201);
  }
  if(/^\/api\/tasks\/\d+$/.test(p)&&req.method==='DELETE'){
-   const id=Number(p.split('/')[3]);
-   const r=db.query('DELETE FROM tasks WHERE id=? AND session_id=?').run(id,sid);
-   return r.changes?json({ok:true}):bad('없는 일정입니다.',404);
+  const id=Number(p.split('/')[3]),r=db.query('DELETE FROM tasks WHERE id=? AND session_id=?').run(id,sid);
+  return r.changes?json({ok:true}):bad('없는 일정입니다.',404);
  }
  return bad('경로를 찾을 수 없습니다.',404);
 }});
