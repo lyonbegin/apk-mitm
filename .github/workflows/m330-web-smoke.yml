@@ -100,7 +100,7 @@ jobs:
             -d '{"name":"검증 2호기","floor_id":"gyeongae-2"}' "$BASE/api/robots" >/tmp/robot2.json
           second=$(jq -r '.robot.id' /tmp/robot2.json)
           jq -e '.robot.name=="검증 2호기" and .robot.floor_id=="gyeongae-2"' /tmp/robot2.json
-          curl -fsS -b "$jar" "$BASE/api/dashboard" | jq -e --argjson id "$second" '.robots | length==2 and any(.id==$id)'
+          curl -fsS -b "$jar" "$BASE/api/dashboard" | jq -e --argjson id "$second" '(.robots|length)==2 and (.robots|any(.id==$id))'
           curl -fsS -b "$jar" -H 'Content-Type: application/json' \
             -d "{\"robot_id\":$second,\"floor_id\":\"gyeongae-2\",\"time\":\"10:30\",\"weekdays\":\"0,1,2,3,4\"}" \
             "$BASE/api/tasks" >/tmp/task2.json
@@ -115,7 +115,7 @@ jobs:
             -d "{\"command\":\"start\",\"robot_ids\":[$first,$second]}" "$BASE/api/commands/batch" | jq -e '.simulated==true and .affected==2'
           curl -fsS -b "$jar" "$BASE/api/dashboard" | jq -e \
             --argjson first "$first" --argjson second "$second" --argjson task "$task" \
-            '(.robots | length==2 and all(.status=="청소 중")) and
+            '((.robots|length)==2 and (.robots|all(.status=="청소 중"))) and
              (.tasks | any(.id==$task and .robot_id==$second)) and
              (.events | any(.robot_id==$first) and any(.robot_id==$second))'
           curl -fsS -b "$jar" -H 'Content-Type: application/json' \
@@ -140,7 +140,7 @@ jobs:
           test "$code" = 404
           curl -fsS -b "$jar" -X DELETE "$BASE/api/robots/$second" | jq -e '.ok and .archived'
           curl -fsS -b "$jar" "$BASE/api/dashboard" | jq -e \
-            --argjson first "$first" --argjson second "$second" '.robots | length==1 and .[0].id==$first'
+            --argjson first "$first" --argjson second "$second" '(.robots|length)==1 and .robots[0].id==$first'
           curl -fsS -b "$jar" "$BASE/api/dashboard" | jq -e \
             --argjson second "$second" '.events | any(.robot_id==$second)'
           curl -fsS -b "$jar" -X DELETE "$BASE/api/tasks/$task" | jq -e '.ok'
