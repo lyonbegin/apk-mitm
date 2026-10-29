@@ -1,0 +1,33 @@
+.twin-title{font-size:23px;letter-spacing:-.7px;margin:8px 0}
+.twin-filter{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin:15px 0}
+.twin-filter label{font-size:12px;font-weight:750;color:#536f65;flex:1;min-width:132px}
+.twin-filter select{margin-top:5px;background:white}
+.twin-map-wrap{background:#fff;border:1px solid #dce7e2;border-radius:18px;overflow:hidden}
+#twin-svg{display:block;width:100%;height:auto;touch-action:pan-y}
+.twin-zone{cursor:pointer;transition:opacity .15s,stroke-width .15s}
+.twin-zone:hover{opacity:.8}.twin-zone.is-selected{stroke:#0b5245;stroke-width:5px}
+.twin-label{font-size:13px;fill:#153f35;pointer-events:none;font-weight:700}
+.twin-label-small{font-size:11px;fill:#31594e;pointer-events:none}
+.twin-stairs-label{font-size:12px;fill:#7d461e;font-weight:800;pointer-events:none}
+.twin-help{font-size:11px;color:#688377;line-height:1.6;margin-top:9px}
+.twin-legend{display:flex;align-items:center;flex-wrap:wrap;gap:11px;padding:12px 14px;border-top:1px solid #ecf0ed;font-size:11px;color:#527267}
+.twin-dot{display:inline-block;height:10px;width:10px;vertical-align:-1px;border-radius:3px;margin-right:4px}
+.twin-zones{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:15px 0}
+.twin-zone-btn{border:1px solid #d6e7dd;background:#fff;border-radius:12px;text-align:left;padding:12px;min-height:70px;font-weight:800;font-size:12px;line-height:1.4}
+.twin-zone-btn small{display:block;font-size:10px;font-weight:500;color:#728b7e;margin-top:5px}
+.twin-zone-btn.selected{border:2px solid #0a6854;background:#eff8f2}
+.twin-zone-btn.stairs{background:#fff6e8;border-color:#eacfac}
+.twin-panel{background:#fff;border:1px solid #dce7e2;border-radius:16px;padding:16px;margin:15px 0}
+.twin-panel p{font-size:12px;color:#617f73;line-height:1.6}
+.twin-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.twin-actions button{border:1px solid #cfdfd6;background:#fff;color:#14574b;border-radius:10px;padding:11px 13px;font-size:12px;font-weight:800}
+.twin-actions button.primary{background:#145e52;color:#fff;border-color:#145e52}
+.twin-actions button:disabled{opacity:.45;cursor:not-allowed}
+.twin-status{padding:12px;border-radius:11px;background:#f2f7f4;font-size:12px;color:#29614e;margin:10px 0}
+.twin-progress{height:11px;border-radius:8px;background:#e6efe8;overflow:hidden}
+.twin-progress div{height:100%;background:linear-gradient(90deg,#36a287,#0d6956);transition:width .8s linear}
+.twin-robot{filter:drop-shadow(0 2px 3px #163b4b40)}
+.twin-stair-note{padding:12px;border-radius:12px;background:#fff4e4;color:#82532b;font-size:12px;line-height:1.6;margin:10px 0}
+.twin-overview{display:flex;flex-wrap:wrap;gap:8px}
+.twin-stat{background:#e8f3ec;border-radius:9px;padding:9px;color:#1c6a54;font-size:11px}
+@media(max-width:390px){.twin-zones{grid-template-columns:1fr 1fr}.twin-filter{gap:7px}.twin-zone-btn{font-size:11px;padding:10px}}
