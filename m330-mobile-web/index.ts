@@ -1,8 +1,61 @@
 import {Database} from 'bun:sqlite';
 import {mkdirSync} from 'node:fs';
 import {dirname} from 'node:path';
+import {createHash,randomBytes} from 'node:crypto';
 // LEFANT M330 PRO mobile web (demo-only). No Tuya credentials and no robot writes.
 const PAGE = "<!doctype html>\n<html lang=\"ko\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\"><meta name=\"theme-color\" content=\"#103f39\"><title>M330 PRO · 청소관리</title>\n<style>\n:root{font-family:Pretendard,-apple-system,BlinkMacSystemFont,\"Noto Sans KR\",sans-serif;color:#16352f;background:#f6f8f7;font-size:15px}\n*{box-sizing:border-box}body{margin:0}.app{max-width:720px;margin:auto;min-height:100vh;padding-bottom:100px}header{display:flex;align-items:center;gap:11px;padding:20px 22px 16px;background:#fff;position:sticky;top:0;z-index:5;border-bottom:1px solid #e4e9e7}.mark{width:41px;height:41px;border-radius:12px;background:#103f39;color:white;display:grid;place-items:center;font-size:23px}.identity{flex:1}.eyebrow{font-size:10px;letter-spacing:2.5px;color:#74978d;font-weight:800}.identity strong{font-size:24px;line-height:1.1;color:#102e29}.identity strong span{color:#26907b;font-weight:400}button,select,input{font:inherit}button{cursor:pointer}button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #42b59a;outline-offset:2px}.pill{background:#fff5e8;border:1px solid #f3dec7;color:#a55d20;border-radius:50px;padding:8px 11px;font-size:12px;font-weight:800}.refresh{height:36px;width:36px;border-radius:50%;border:1px solid #dce5e2;background:white;color:#274c44;font-size:20px}main{padding:26px 23px 0}.over{color:#598f81;font-weight:900;font-size:11px;letter-spacing:1.7px}.hero h1{font-size:29px;letter-spacing:-1.5px;margin:11px 0 8px}.muted{color:#84958f;line-height:1.6}.alert{font-size:12px;line-height:1.6;background:#fff9ed;color:#925c25;border:1px solid #edd5ab;padding:14px;border-radius:12px;margin:22px 0 20px}.robot{border-radius:25px;padding:24px 24px 0;background:linear-gradient(145deg,#16554d,#092e29);color:#fff;box-shadow:0 15px 30px #123c3020;overflow:hidden}.robothead{display:flex;justify-content:space-between;align-items:center;gap:10px}.state{background:#ffffff14;border:1px solid #ffffff28;border-radius:50px;padding:7px 12px;font-size:12px}.state:before{content:\"\";display:inline-block;height:7px;width:7px;border-radius:50%;background:#77e1c0;margin-right:7px}.robotname{font-size:10px;letter-spacing:2px;color:#b1d5c9;font-weight:900}.robotbody{display:flex;align-items:center;justify-content:space-between;min-height:190px;gap:10px}.vacuum{width:147px;height:147px;border-radius:50%;background:radial-gradient(circle at 36% 24%,#fff,#d4e4e0 72%,#a6beb8 100%);border:7px solid #cfe0dc;box-shadow:0 0 0 13px #ffffff08,0 0 0 27px #ffffff07,0 7px 12px #0003;position:relative;flex-shrink:0}.vacuum:before{content:\"\";position:absolute;left:38%;top:13%;width:33px;height:33px;border-radius:50%;background:radial-gradient(circle,#547c72 0 23%,#d7e5e1 29% 54%,#9ab7ae 60%);box-shadow:0 1px 5px #0004}.vacuum:after{content:\"\";position:absolute;right:25%;bottom:19%;height:4px;width:39px;border-radius:5px;background:#a6beb8;transform:rotate(-16deg)}.battery{text-align:right;min-width:115px}.battery .n{font-size:61px;letter-spacing:-3px;font-weight:900}.battery .n span{font-size:23px;color:#9bcbba}.batteryline{height:5px;border-radius:6px;background:#ffffff22;overflow:hidden;margin:9px 0 11px}.batteryline b{display:block;background:#b5e8d3;height:100%}.small{font-size:11px;color:#b1d5c9;line-height:1.6}.robotfoot{border-top:1px solid #ffffff1a;display:flex;justify-content:space-between;padding:15px 0;font-size:11px;color:#b5d8cd}.section{margin-top:32px}.section h2{font-size:19px;letter-spacing:-.6px;margin:7px 0 16px}.between{display:flex;justify-content:space-between;align-items:center}.buildings{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.building{padding:15px 12px;text-align:left;border:1px solid #e0e7e4;background:white;border-radius:14px;font-weight:800;color:#6a7e77}.building.active{border-color:#a6d8c7;background:#e5f5ed;color:#1a7661}.floors{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin-top:12px}.floor{border:1px solid #dce5e1;background:white;border-radius:12px;padding:12px 0;font-weight:800;color:#637c73}.floor.active{background:#10584d;color:#fff;border-color:#10584d}.controlgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.control{border:1px solid #e1e8e5;background:#fff;border-radius:18px;min-height:138px;text-align:left;padding:15px;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;color:#183a32;font-size:13px;font-weight:900}.control.primary{background:#196d5e;color:#fff;border-color:#196d5e}.control .controlicon{width:40px;height:40px;border-radius:12px;background:#f0f5f2;display:grid;place-items:center;font-size:18px}.control.primary .controlicon{background:#ffffff24}.control small{font-size:10px;line-height:1.35;font-weight:500;color:#9aada6}.control.primary small{color:#c0e5d9}.panel{border:1px solid #e1e8e5;border-radius:18px;background:white;padding:16px}.tabs{position:fixed;bottom:0;left:0;right:0;z-index:7;background:#fff;border-top:1px solid #e4e9e7;display:flex;justify-content:space-around;max-width:720px;margin:auto;padding:10px 7px max(12px,env(safe-area-inset-bottom))}.nav{border:0;background:transparent;padding:6px 9px;color:#95a5a0;display:flex;flex-direction:column;gap:4px;align-items:center;font-size:11px}.nav .ico{font-size:21px}.nav.active{color:#17695b;font-weight:900}.hidden{display:none!important}.fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}input,select{width:100%;padding:12px;border:1px solid #dbe4df;border-radius:11px;background:#fff;color:#284c42}.save{background:#145e52;color:white;border:0;border-radius:11px;padding:13px 17px;font-weight:800}.empty{font-size:13px;color:#94a6a0;padding:24px 5px;text-align:center}.item{padding:13px 0;border-bottom:1px solid #eef2f0;font-size:13px}.item:last-child{border:0}.item strong{font-size:14px}.item small{display:block;color:#859b93;margin-top:5px}.delete{float:right;background:#fff1f1;border:0;padding:5px 9px;border-radius:8px;color:#b04a4a}.mapbox{height:250px;background:repeating-linear-gradient(0deg,#eaf0ed 0,#eaf0ed 1px,transparent 1px,transparent 29px),repeating-linear-gradient(90deg,#eaf0ed 0,#eaf0ed 1px,#f6f9f7 1px,#f6f9f7 29px);border:1px dashed #bacfc5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;border-radius:18px;text-align:center;color:#769286}.mapbox b{color:#2d5c4d}.toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#102d28;color:white;padding:13px 16px;border-radius:12px;z-index:20;font-size:12px;max-width:90vw;display:none;box-shadow:0 7px 20px #0003}.footnote{font-size:11px;color:#8ba198;line-height:1.65;margin-top:14px}@media(max-width:360px){main{padding:22px 14px 0}header{padding:16px 14px}.robot{padding:18px 17px 0}.vacuum{width:116px;height:116px}.battery .n{font-size:49px}.control{padding:12px;min-height:130px}} \n</style></head><body><div class=\"app\"><header><div class=\"mark\">◉</div><div class=\"identity\"><div class=\"eyebrow\">CLEAN OPERATIONS</div><strong>M330<span>PRO</span></strong></div><span class=\"pill\">데모 모드</span><button class=\"refresh\" onclick=\"load()\" aria-label=\"새로고침\">⟳</button></header>\n<main><section id=\"view-home\"><div class=\"hero\"><div class=\"over\">등촌고등학교 · 청소 운영</div><h1>오늘의 청소 현황.</h1><div class=\"muted\">2개 동의 청소 작업을 한 곳에서 관리합니다.</div></div>\n<div class=\"alert\">체험 화면입니다. 청소·충전 명령은 <b>시뮬레이션</b>으로만 실행하며 실제 M330 Pro에 전송하지 않습니다.</div>\n<div class=\"robot\"><div class=\"robothead\"><span class=\"state\" id=\"status\">대기 · 예시</span><span class=\"robotname\">ROBOT 01 / M330 PRO</span></div><div class=\"robotbody\"><div class=\"vacuum\"></div><div class=\"battery\"><div class=\"small\">배터리 잔량</div><div class=\"n\"><span id=\"battery\">82</span><span>%</span></div><div class=\"batteryline\"><b id=\"batterybar\" style=\"width:82%\"></b></div><div class=\"small\">가상 배터리 · 실제 측정값 아님</div></div></div><div class=\"robotfoot\"><span>♧ 시뮬레이션 · 기기 미연결</span><span id=\"updated\">갱신 대기</span></div></div>\n<section class=\"section\"><div class=\"over\">WORKSPACE</div><div class=\"between\"><h2>청소구역 선택</h2><small style=\"color:#9aaba5\">10개 층 · 초기 구성</small></div><div class=\"buildings\"><button id=\"b-myeonhak\" class=\"building active\" onclick=\"pickBuilding('myeonhak')\">▤ &nbsp; 면학동</button><button id=\"b-gyeongae\" class=\"building\" onclick=\"pickBuilding('gyeongae')\">▤ &nbsp; 경애동</button></div><div class=\"floors\" id=\"floors\"></div></section>\n<section class=\"section\"><div class=\"over\">QUICK CONTROL</div><div class=\"between\"><h2>로봇 제어</h2><small style=\"color:#9aaba5\">명령 확인 후 전송</small></div><div class=\"controlgrid\"><button class=\"control primary\" onclick=\"command('start')\"><span class=\"controlicon\">▶</span><span>청소 시작</span><small>선택한 층</small></button><button class=\"control\" onclick=\"command('pause')\"><span class=\"controlicon\">Ⅱ</span><span>일시정지</span><small>진행 중 작업</small></button><button class=\"control\" onclick=\"command('dock')\"><span class=\"controlicon\">⌂</span><span>충전 복귀</span><small>등록된 충전기</small></button></div><p class=\"footnote\">※ 위 명령은 서버의 데모 상태만 변경합니다. 실제 로봇은 작동하지 않습니다.</p></section>\n<section class=\"section\"><div class=\"over\">RECENT ACTIVITY</div><div class=\"between\"><h2>최근 작업 기록</h2><button style=\"background:none;border:0;color:#197360;font-weight:800\" onclick=\"switchTab('log')\">전체 보기 →</button></div><div class=\"panel\" id=\"recent\"></div></section>\n</section>\n<section id=\"view-map\" class=\"hidden\"><div class=\"over\">FLOOR MAP</div><h1>층별 지도</h1><p class=\"muted\">현재 선택: <b id=\"map-floor\">면학동 5층</b></p><div class=\"mapbox\"><div style=\"font-size:34px\">▤</div><b>실제 지도 데이터 미연동</b><span style=\"font-size:12px\">M330 Pro 지도 프로토콜 확인 후 표시됩니다.</span></div><p class=\"footnote\">APK에서 지도 관련 SDK와 명령은 확인했지만 실제 기기의 지도 수신은 아직 검증되지 않았습니다.</p></section>\n<section id=\"view-tasks\" class=\"hidden\"><div class=\"over\">SCHEDULE</div><h1>청소 일정</h1><p class=\"muted\">층별 청소 계획을 저장합니다. 자동 실행은 하지 않습니다.</p><div class=\"panel\"><div class=\"fields\"><label>청소구역<select id=\"task-floor\"></select></label><label>시각<input type=\"time\" id=\"task-time\" value=\"07:00\"></label></div><label style=\"display:block;margin-bottom:10px\">요일<select id=\"task-days\"><option value=\"0,1,2,3,4\">월~금</option><option value=\"0,1,2,3,4,5\">월~토</option><option value=\"0,1,2,3,4,5,6\">매일</option><option value=\"5,6\">주말</option></select></label><button class=\"save\" onclick=\"addTask()\">＋ 일정 등록</button><p class=\"footnote\">일정은 서버에 저장되며 같은 브라우저에서 다시 열면 유지됩니다.</p></div><section class=\"section\"><h2>등록된 일정</h2><div class=\"panel\" id=\"task-list\"></div></section></section>\n<section id=\"view-log\" class=\"hidden\"><div class=\"over\">HISTORY</div><h1>작업 기록</h1><p class=\"muted\">실제 청소 이력이 아니라 데모 버튼 작동 기록입니다.</p><div class=\"panel\" id=\"history\"></div></section>\n<section id=\"view-settings\" class=\"hidden\"><div class=\"over\">SYSTEM</div><h1>연결 · 진단</h1><div class=\"panel\"><p><b>M330 Pro 모바일 웹 v0.2</b></p><p>운영 모드: <b>시뮬레이션 전용</b></p><p>로봇 통신: <b>미연결</b></p><p>지도 수신: <b>미구현</b></p><p>배포: <b>GitHub 자동 배포</b></p><p class=\"footnote\">실제 로봇 제어용 인증정보가 없으므로 원격 제어 명령 API는 존재하지 않습니다. 새로고침과 명령 상태는 데모 용도입니다.</p><button class=\"save\" onclick=\"checkHealth()\">서버 응답 확인</button><pre id=\"health\" style=\"white-space:pre-wrap;word-break:break-all;color:#52766a\"></pre></div></section>\n</main><nav class=\"tabs\"><button class=\"nav active\" data-nav=\"home\" onclick=\"switchTab('home')\"><span class=\"ico\">▦</span>홈</button><button class=\"nav\" data-nav=\"map\" onclick=\"switchTab('map')\"><span class=\"ico\">◫</span>지도</button><button class=\"nav\" data-nav=\"tasks\" onclick=\"switchTab('tasks')\"><span class=\"ico\">▤</span>일정</button><button class=\"nav\" data-nav=\"log\" onclick=\"switchTab('log')\"><span class=\"ico\">◷</span>기록</button><button class=\"nav\" data-nav=\"settings\" onclick=\"switchTab('settings')\"><span class=\"ico\">⚙</span>설정</button></nav><div class=\"toast\" id=\"toast\"></div></div>\n<script>\nvar currentBuilding='myeonhak',currentFloor='myeonhak-5',dashboard=null;\nvar bnames={myeonhak:'면학동',gyeongae:'경애동'};\nfunction el(id){return document.getElementById(id)}\nfunction show(msg){el('toast').textContent=msg;el('toast').style.display='block';setTimeout(function(){el('toast').style.display='none'},3300)}\nfunction pickBuilding(b){currentBuilding=b;currentFloor=b+'-5';renderFloors()}\nfunction pickFloor(i){currentFloor=currentBuilding+'-'+i;renderFloors()}\nfunction renderFloors(){['myeonhak','gyeongae'].forEach(function(b){el('b-'+b).classList.toggle('active',b===currentBuilding)});el('floors').innerHTML=[5,4,3,2,1].map(function(i){return '<button class=\"floor '+(currentFloor===currentBuilding+'-'+i?'active':'')+'\" onclick=\"pickFloor('+i+')\">'+i+'층</button>'}).join('');el('map-floor').textContent=bnames[currentBuilding]+' '+currentFloor.split('-')[1]+'층'}\nfunction switchTab(tab){['home','map','tasks','log','settings'].forEach(function(t){el('view-'+t).classList.toggle('hidden',t!==tab)});document.querySelectorAll('[data-nav]').forEach(function(n){n.classList.toggle('active',n.dataset.nav===tab)});window.scrollTo(0,0);if(tab==='tasks'||tab==='log')load()}\nasync function request(path,opts){var r=await fetch(path,opts);var j=await r.json();if(!r.ok)throw Error(j.detail||'요청 실패');return j}\nasync function load(){try{dashboard=await request('/api/dashboard');var r=dashboard.robot;el('status').textContent=r.status+' · 예시';el('battery').textContent=r.battery;el('batterybar').style.width=r.battery+'%';el('updated').textContent='갱신 '+new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});var items=dashboard.events||[];el('recent').innerHTML=items.length?eventHtml(items.slice(0,3)):'<div class=\"empty\">작업 기록이 없습니다.</div>';el('history').innerHTML=items.length?eventHtml(items):'<div class=\"empty\">작업 기록이 없습니다.</div>';el('task-list').innerHTML=dashboard.tasks.length?dashboard.tasks.map(function(t){return '<div class=\"item\"><button class=\"delete\" onclick=\"removeTask('+t.id+')\">삭제</button><strong>'+t.building_name+' '+t.floor_name+' · '+t.time+'</strong><small>요일 '+t.weekdays+' · 계획만 저장됨</small></div>'}).join(''):'<div class=\"empty\">등록된 일정이 없습니다.</div>';}catch(e){show('서버 연결 오류: '+e.message)}}\nfunction eventHtml(items){return items.map(function(x){return '<div class=\"item\"><strong>'+escapeHtml(x.title)+'</strong><small>'+escapeHtml(x.detail)+' · '+escapeHtml(x.at)+'</small><small>시뮬레이션</small></div>'}).join('')}\nfunction escapeHtml(s){return String(s||'').replace(/[&<>\"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#039;'}[c]})}\nasync function command(c){try{var d=await request('/api/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:c,floor_id:currentFloor})});show(d.message);await load()}catch(e){show(e.message)}}\nasync function addTask(){try{var data={floor_id:el('task-floor').value,time:el('task-time').value,weekdays:el('task-days').value};await request('/api/tasks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});show('청소 일정 계획 저장');await load()}catch(e){show(e.message)}}\nasync function removeTask(id){try{await request('/api/tasks/'+id,{method:'DELETE'});show('일정 삭제');await load()}catch(e){show(e.message)}}\nasync function checkHealth(){try{el('health').textContent=JSON.stringify(await request('/api/health'),null,2)}catch(e){show(e.message)}}\nel('task-floor').innerHTML=['myeonhak','gyeongae'].map(function(b){return [5,4,3,2,1].map(function(i){return '<option value=\"'+b+'-'+i+'\">'+bnames[b]+' '+i+'층</option>'}).join('')}).join('');\nrenderFloors();load();\n</script></body></html>";
+
+const BRIDGE_PANEL = \`
+<style>
+.m330-bridge-card{margin:14px 0;border:1px solid #beded3;border-radius:18px;background:#f1faf6;padding:16px}
+.m330-bridge-card h2{font-size:17px;margin:2px 0 10px;color:#13594d}
+.m330-bridge-card p{font-size:12px;color:#4f786c;line-height:1.6}
+.m330-bridge-card pre{font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere;background:#fff;border-radius:10px;padding:12px}
+.m330-bridge-card button{padding:10px 12px;border:1px solid #91bfb0;border-radius:9px;background:#fff;color:#13594d;font-size:12px;font-weight:800}
+.m330-bridge-actions{display:flex;gap:8px;flex-wrap:wrap}
+</style>
+<div class="m330-bridge-card">
+<h2>실기기 LAN 진단 연결</h2>
+<p><b>읽기 전용 연결입니다.</b> 현장 PC에서 로봇 상태를 조회하여 웹에 표시합니다. 로봇 청소 시작·일시정지·충전 명령은 전송하지 않습니다.</p>
+<p id="m330-bridge-summary">연결상태 확인 중</p>
+<div class="m330-bridge-actions">
+<button onclick="m330BridgeRefresh()">상태 새로고침</button>
+<button onclick="m330BridgePair()">연결키 새로 발급</button>
+<button onclick="m330BridgeRevoke()">연결 해제</button>
+</div>
+<p>발급된 연결키는 한 번만 보입니다. 현장 PC의 <b>M330_BRIDGE_KEY</b> 환경변수에 입력해 주십시오. 기존 키는 재발급 시 폐기됩니다.</p>
+<pre id="m330-bridge-key" hidden></pre>
+<pre id="m330-bridge-observation">실제 장치 관측 정보 없음</pre>
+<p>현장 도구: <code>gateway/m330_lan_probe.py</code> · <code>gateway/m330_bridge.py</code>. 웹에서 로봇이 자동 발견되는 방식은 아닙니다.</p>
+</div>\`;
+const BRIDGE_SCRIPT = \`<script>
+async function m330BridgeRefresh(){
+ const sum=document.getElementById('m330-bridge-summary');
+ const out=document.getElementById('m330-bridge-observation');
+ try{
+  const r=await fetch('/api/gateway/status',{cache:'no-store'});const d=await r.json();
+  if(!r.ok)throw Error(d.detail||'조회 실패');
+  sum.textContent=d.online?'● 현장 LAN 읽기 전용 응답 수신 중':(d.last_seen?'● 최근 응답 없음 · 마지막 수신 '+d.last_seen:'● 현장 게이트웨이 연결 전');
+  out.textContent=d.last_seen?JSON.stringify({상태:d.online?'수신 중':'오프라인',마지막수신:d.last_seen,프로토콜:d.protocol,기기참조:d.device_ref,원시_DP_검증전:d.raw_dps},null,2):'실제 기기에서 수신한 자료가 없습니다.';
+ }catch(e){sum.textContent='브리지 조회 실패: '+e.message}
+}
+async function m330BridgePair(){
+ if(!confirm('기존 연결키가 있다면 무효화됩니다. 새 키를 발급하시겠습니까?'))return;
+ try{
+  const r=await fetch('/api/gateway/pair',{method:'POST'});const d=await r.json();if(!r.ok)throw Error(d.detail||'발급 실패');
+  const e=document.getElementById('m330-bridge-key');e.hidden=false;
+  e.textContent='M330_BRIDGE_KEY='+d.pair_key+'\\n\\n현장 PC에서 설정 후 python3 gateway/m330_bridge.py --once 실행';
+  m330BridgeRefresh();
+ }catch(e){alert('연결키 발급 실패: '+e.message)}
+}
+async function m330BridgeRevoke(){
+ if(!confirm('연결을 해제하고 서버에 저장된 관측값도 삭제하시겠습니까?'))return;
+ try{const r=await fetch('/api/gateway/revoke',{method:'POST'});if(!r.ok)throw Error('해제 실패');
+ document.getElementById('m330-bridge-key').hidden=true;m330BridgeRefresh();
+ }catch(e){alert(e.message)}
+}
+m330BridgeRefresh();setInterval(m330BridgeRefresh,20000);
+<\/script>\`;
 
 const buildings=[
  {id:'myeonhak',name:'면학동',floors:[5,4,3,2,1].map(n=>({id:'myeonhak-'+n,label:n+'층',building_id:'myeonhak'}))},
@@ -18,7 +71,20 @@ db.exec("CREATE TABLE IF NOT EXISTS tasks(id INTEGER PRIMARY KEY AUTOINCREMENT,s
 db.exec("CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT,session_id TEXT NOT NULL,at TEXT NOT NULL,title TEXT NOT NULL,detail TEXT NOT NULL,simulated INTEGER NOT NULL DEFAULT 1)");
 db.exec("CREATE INDEX IF NOT EXISTS idx_tasks_session ON tasks(session_id,id)");
 db.exec("CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id,id)");
+db.exec("CREATE TABLE IF NOT EXISTS gateway_pairs(session_id TEXT PRIMARY KEY,token_hash TEXT UNIQUE NOT NULL,created_at TEXT NOT NULL)");
+db.exec("CREATE TABLE IF NOT EXISTS gateway_observations(session_id TEXT PRIMARY KEY,last_seen TEXT NOT NULL,connected INTEGER NOT NULL,device_ref TEXT NOT NULL,protocol TEXT NOT NULL,raw_dps TEXT NOT NULL)");
 const validFloors=new Set(buildings.flatMap(b=>b.floors.map(f=>f.id)));
+const tokenHash=(v:string)=>createHash('sha256').update(v).digest('hex');
+const getGateway=(sid:string)=>{
+ const pair=db.query('SELECT session_id FROM gateway_pairs WHERE session_id=?').get(sid);
+ const obs=db.query('SELECT last_seen,connected,device_ref,protocol,raw_dps FROM gateway_observations WHERE session_id=?').get(sid) as any;
+ const age=obs?Math.max(0,Math.round((Date.now()-Date.parse(obs.last_seen))/1000)):null;
+ return {paired:!!pair,online:!!obs&&obs.connected===1&&age!==null&&age<=90,
+  last_seen:obs?.last_seen||null,age_seconds:age,device_ref:obs?.device_ref||null,
+  protocol:obs?.protocol||null,raw_dps:obs?JSON.parse(obs.raw_dps):null,
+  verification:'read_only_unmapped',commands_enabled:false};
+};
+
 function state(sid){
  let r=db.query('SELECT status,battery,floor_id FROM sessions WHERE id=?').get(sid);
  if(!r){
@@ -37,14 +103,52 @@ const eventList=db.query('SELECT * FROM events WHERE session_id=? ORDER BY id DE
 Bun.serve({port:Number(Bun.env.PORT||3000),hostname:'0.0.0.0',async fetch(req){
  const u=new URL(req.url),p=u.pathname;
  const {sid,fresh}=cookieSession(req);
- const cookie=fresh?{'Set-Cookie':'m330_session='+sid+'; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000'}:{};
+ const cookie=fresh&&p!=='/api/gateway/observations'?{'Set-Cookie':'m330_session='+sid+'; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000'}:{};
  const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store',...cookie}});
  const bad=(detail,status=400)=>json({detail},status);
- const robot=state(sid);
- if(p==='/'&&req.method==='GET')return new Response(PAGE,{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...cookie}});
+ const robot=p==='/api/dashboard'||p==='/api/command'?state(sid):null;
+ if(p==='/'&&req.method==='GET')return new Response(
+  PAGE.replace('<div class="panel"><p><b>M330 Pro 모바일 웹 v0.2',BRIDGE_PANEL+'<div class="panel"><p><b>M330 Pro 모바일 웹 v0.2')
+      .replace('</body>',BRIDGE_SCRIPT+'</body>'),{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...cookie}});
+ if(p==='/api/gateway/status'&&req.method==='GET')return json(getGateway(sid));
+ if(p==='/api/gateway/pair'&&req.method==='POST'){
+   state(sid);
+   const key=randomBytes(32).toString('hex');
+   db.query('INSERT INTO gateway_pairs(session_id,token_hash,created_at) VALUES(?,?,?) ON CONFLICT(session_id) DO UPDATE SET token_hash=excluded.token_hash,created_at=excluded.created_at').run(sid,tokenHash(key),new Date().toISOString());
+   db.query('DELETE FROM gateway_observations WHERE session_id=?').run(sid);
+   return json({ok:true,pair_key:key,mode:'read_only',note:'키는 다시 조회할 수 없습니다.'});
+ }
+ if(p==='/api/gateway/revoke'&&req.method==='POST'){
+   db.query('DELETE FROM gateway_pairs WHERE session_id=?').run(sid);
+   db.query('DELETE FROM gateway_observations WHERE session_id=?').run(sid);
+   return json({ok:true});
+ }
+ if(p==='/api/gateway/observations'&&req.method==='POST'){
+   const token=req.headers.get('X-M330-Pairing-Key')||'';
+   if(!/^[a-f0-9]{64}$/.test(token))return bad('유효하지 않은 브리지 키',401);
+   const matched=db.query('SELECT session_id FROM gateway_pairs WHERE token_hash=?').get(tokenHash(token)) as any;
+   if(!matched)return bad('연결되지 않은 브리지 키',401);
+   let payload:any;
+   try{
+     const body=await req.text();if(body.length>32000)return bad('관측 데이터 크기 초과',413);
+     payload=JSON.parse(body);
+   }catch{return bad('관측 JSON 형식 오류',400)}
+   if(!payload||payload.mode!=='read_only'||typeof payload.connected!=='boolean'||!payload.raw_dps||typeof payload.raw_dps!=='object'||Array.isArray(payload.raw_dps))return bad('읽기 전용 관측 데이터만 수신합니다.',422);
+   const dps:Record<string,unknown>={};
+   for(const [k,v] of Object.entries(payload.raw_dps).slice(0,80)){
+     if(!/^\d{1,4}$/.test(k))continue;
+     if(v===null||typeof v==='boolean'||typeof v==='number'&&Number.isFinite(v))dps[k]=v;
+     else if(typeof v==='string')dps[k]=v.slice(0,160);
+   }
+   const ref=typeof payload.device_ref==='string'&&/^[a-f0-9]{12}$/.test(payload.device_ref)?payload.device_ref:'';
+   const protocol=typeof payload.protocol==='string'&&/^(3\.[1-5])$/.test(payload.protocol)?payload.protocol:'';
+   db.query('INSERT INTO gateway_observations(session_id,last_seen,connected,device_ref,protocol,raw_dps) VALUES(?,?,?,?,?,?) ON CONFLICT(session_id) DO UPDATE SET last_seen=excluded.last_seen,connected=excluded.connected,device_ref=excluded.device_ref,protocol=excluded.protocol,raw_dps=excluded.raw_dps')
+    .run(matched.session_id,new Date().toISOString(),payload.connected?1:0,ref,protocol,JSON.stringify(dps));
+   return json({ok:true,received:true,read_only:true,interpreted:false});
+ }
  if(p==='/api/health'&&req.method==='GET')return json({ok:true,service:'m330-pro-mobile-web',mode:'demo',storage:'sqlite',at:new Date().toISOString()});
- if(p==='/api/dashboard'&&req.method==='GET')return json({mode:'demo',robot,buildings,tasks:taskList.all(sid),events:eventList.all(sid),demo_controls_enabled:true,real_control_enabled:false,features:{map:'not_integrated',schedules:'planning_only',real_write_verified:false,storage:'persistent_sqlite'},updated_at:new Date().toISOString()});
- if(p==='/api/diagnostics'&&req.method==='GET')return json({mode:'demo',robot_connected:false,map_connected:false,real_command_available:false,storage:'persistent_sqlite',note:'No actual M330 Pro device or verified protocol connected.'});
+ if(p==='/api/dashboard'&&req.method==='GET')return json({mode:'demo',robot,buildings,tasks:taskList.all(sid),events:eventList.all(sid),demo_controls_enabled:true,real_control_enabled:false,gateway:getGateway(sid),features:{map:'not_integrated',schedules:'planning_only',real_write_verified:false,storage:'persistent_sqlite'},updated_at:new Date().toISOString()});
+ if(p==='/api/diagnostics'&&req.method==='GET')return json({mode:'demo',robot_connected:false,map_connected:false,real_command_available:false,storage:'persistent_sqlite',gateway:getGateway(sid),note:'No hardware command protocols verified; LAN gateway is read-only.'});
  if(p==='/api/command'&&req.method==='POST'){
    let d;try{d=await req.json()}catch{return bad('JSON 형식 오류')};
    const labels={start:'청소 시작',pause:'일시정지',dock:'충전 복귀'};
