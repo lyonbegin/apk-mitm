@@ -34,7 +34,7 @@ Bun.serve({port:Number(Bun.env.PORT||3000),hostname:'0.0.0.0',async fetch(req){
    if(!validFloors.has(d.floor_id))return bad('청소구역이 올바르지 않습니다.',422);
    if(!/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(d.time||''))return bad('시간 형식 오류',422);
    const bd=buildings.find(b=>d.floor_id.startsWith(b.id+'-'));
-   const t={id:nextId++,floor_id:d.floor_id,time:d.time,weekdays:String(d.weekdays||''),building_name:bd.name,floor_name:d.floor_id.split('-')[1]+'층',enabled:1};
+   const t={id:nextId++,floor_id:d.floor_id,time:d.time,weekdays:String(d.weekdays||'').replace(/[^0-6,]/g,'').slice(0,25),building_name:bd.name,floor_name:d.floor_id.split('-')[1]+'층',enabled:1};
    tasks.push(t);return json(t,201);
  }
  if(/^\/api\/tasks\/\d+$/.test(p)&&req.method==='DELETE'){
