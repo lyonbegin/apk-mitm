@@ -8,7 +8,7 @@ const SPECS={
  model:'Lefant M330 Pro', diameter_m:0.28,height_m:0.095,
  sensing:['dToF navigation','PSD obstacle avoidance','cliff prevention'],
  lidar_range_m:15, psd_fov_degrees:190, dustbin_ml:450, water_tank_ml:200,
- reference_runtime_s:9000, reference_charge_s:19800,
+ battery_capacity_mah:2600,reference_runtime_s:9000, reference_charge_s:19800,
  physical_speed_mps:0.22, battery_return_threshold:20,
  capability_modes:['vacuum','mop','vacuum_mop'], suction:['quiet','standard','max'],
  verified_speeds:false,verified_power_curve:false,verified_mapping_algorithm:false,
@@ -145,7 +145,7 @@ export function initRobotSimulator(db,getFloor){
    if(!['cleaning','returning'].includes(s.state))break;
    if(s.path_index>=s.path.length){
     if(s.state==='returning'){s.state='charging';emit(s,'docked','충전 시작');continue}
-    s.state='completed';emit(s,'cleaning_completed','주행 가능한 경로 끝');break;
+    emit(s,'cleaning_completed','주행 가능한 경로 끝');toDock(s,map,config,'cleaning_completed',false);continue;
    }
    const next=xy(s.path[s.path_index]);
    if(!open.has(s.path[s.path_index])){
@@ -211,7 +211,7 @@ export function initRobotSimulator(db,getFloor){
    coverage_percent:eligible.length?+(done.length/eligible.length*100).toFixed(1):0,
    cleaned_area_m2:+(done.length*.04).toFixed(2),eligible_area_m2:+(eligible.length*.04).toFixed(2),
    distance_m:+s.distance_m.toFixed(2),sim_elapsed_s:+s.elapsed_s.toFixed(1),events:s.events.slice(0,15),
-   sensors:{virtual:true,dt_of_range_m:15,psd_fov_deg:190,rays,cliff_detected:!open.has(gid(s.pose.x+30*Math.cos(s.pose.heading*Math.PI/180),s.pose.y+30*Math.sin(s.pose.heading*Math.PI/180)))},
+   sensors:{virtual:true,dt_of_range_m:15,psd_fov_deg:190,rays,cliff_detected:map.zones.some(z=>z.kind==='stairs'&&inside({x:s.pose.x+30*Math.cos(s.pose.heading*Math.PI/180),y:s.pose.y+30*Math.sin(s.pose.heading*Math.PI/180)},z))},
    return_reason:s.return_reason,auto_resume:s.resume_after_charge,error:s.error,
    hardware_connected:false,simulation:true,calibration:'uncalibrated_reference_model'};
  }
@@ -304,6 +304,19 @@ export function initRobotSimulator(db,getFloor){
    }
    if(p==='/api/sim/command'&&req.method==='POST'){
     const d=await body(req);return response({ok:true,robot:command(sid,d.robot_id,d.action,d),simulated:true});
+   }
+   if(p==='/api/sim/step'&&req.method==='POST'){
+    const d=await body(req);
+    if(!Number.isFinite(d.seconds)||d.seconds<=0||d.seconds>28800)return response({detail:'시험 시간은 1~28800초 이내로 설정하십시오.'},422);
+    const {map,cfg,s}=getRobot(sid,d.robot_id);
+    let remaining=d.seconds;
+    while(remaining>0){
+     const chunk=Math.min(remaining,50*s.accel);
+     tick(s,map,cfg,s.last_ms+chunk/s.accel*1000);
+     remaining-=chunk;
+    }
+    s.last_ms=Date.now();persist(s);
+    return response({ok:true,advanced_sim_seconds:d.seconds,robot:snapshot(s,map,cfg),hardware_command:false});
    }
    if(p==='/api/sim/map'&&req.method==='POST'){
     const d=await body(req);return response({ok:true,config:modifyMap(sid,d.floor_id,d.action,d)});
