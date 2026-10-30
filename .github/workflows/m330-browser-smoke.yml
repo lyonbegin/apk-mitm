@@ -23,10 +23,10 @@ jobs:
           M330_DB_PATH=/tmp/m330-fleet-ci.sqlite PORT=3000 bun run m330-mobile-web/index.ts >/tmp/m330-server.log 2>&1 &
           echo $! > /tmp/m330-server.pid
           for n in $(seq 1 30); do
-            if curl -fsS --max-time 2 http://127.0.0.1:3000/api/health | grep -q digital_twin_simulation; then break; fi
+            if curl -fsS --max-time 2 http://127.0.0.1:3000/api/health | grep -q robot_motion_simulation; then break; fi
             sleep 1
           done
-          curl -fsS http://127.0.0.1:3000/api/health | grep -q digital_twin_simulation
+          curl -fsS http://127.0.0.1:3000/api/health | grep -q robot_motion_simulation || { cat /tmp/m330-server.log; exit 1; }
       - name: Install Playwright and Chromium
         working-directory: m330-mobile-web/tests
         run: |
