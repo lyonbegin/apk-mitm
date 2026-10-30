@@ -62,16 +62,19 @@ try {
   await page.locator('#sim-svg').screenshot({path:'sim-before.png'});
   await page.locator('#sim-start').click();
   await page.waitForFunction(() => document.querySelector('#sim-warning')?.textContent?.includes('청소 중'),null,{timeout:12000});
-  const movedHandle=await page.waitForFunction(async start=>{
-   const j=await (await fetch('/api/sim/state?floor_id=myeonhak-5')).json();
-   const r=j.robots[0],delta=Math.hypot(r.pose.x-start.x,r.pose.y-start.y);
+  let observed=null;
+  for(let attempt=0;attempt<60;attempt++){
+   const r=await page.evaluate(async()=>{
+    const j=await (await fetch('/api/sim/state?floor_id=myeonhak-5')).json();
+    return j.robots[0];
+   });
+   const delta=Math.hypot(r.pose.x-beforeMotion.x,r.pose.y-beforeMotion.y);
    if(delta>20&&r.cleaned_cells>0&&r.distance_m>0.8){
-    window.__movementEvidence={delta_px:delta,area_m2:r.cleaned_area_m2,travel_m:r.distance_m};
-    return true;
+    observed={delta_px:delta,area_m2:r.cleaned_area_m2,travel_m:r.distance_m,pose:r.pose};
+    break;
    }
-   return false;
-  },beforeMotion,{timeout:20000});
-  const observed=await page.evaluate(()=>window.__movementEvidence);
+   await page.waitForTimeout(250);
+  }
   console.log('MOTION_EVIDENCE',JSON.stringify(observed));
   await page.locator('#sim-svg').screenshot({path:'sim-after.png'});
   assert.ok(observed&&observed.delta_px>20,'robot must visibly move by more than 20 SVG pixels');
