@@ -62,15 +62,15 @@ try {
   await page.locator('#sim-svg').screenshot({path:'sim-before.png'});
   await page.locator('#sim-start').click();
   await page.waitForFunction(() => document.querySelector('#sim-warning')?.textContent?.includes('청소 중'),null,{timeout:12000});
-  await page.waitForFunction(async start=>{
+  const movedHandle=await page.waitForFunction(async start=>{
    const j=await (await fetch('/api/sim/state?floor_id=myeonhak-5')).json();
-   const r=j.robots[0];
-   return Math.hypot(r.pose.x-start.x,r.pose.y-start.y)>20&&r.cleaned_cells>0&&r.distance_m>0.8;
+   const r=j.robots[0],delta=Math.hypot(r.pose.x-start.x,r.pose.y-start.y);
+   return delta>20&&r.cleaned_cells>0&&r.distance_m>0.8 ? {delta_px:delta,area_m2:r.cleaned_area_m2,travel_m:r.distance_m} : false;
   },beforeMotion,{timeout:20000});
+  const observed=await movedHandle.jsonValue();
   await page.locator('#sim-svg').screenshot({path:'sim-after.png'});
-  const afterMotion=await page.evaluate(async()=>{const j=await (await fetch('/api/sim/state?floor_id=myeonhak-5')).json();return j.robots[0];});
-  assert.ok(Math.hypot(afterMotion.pose.x-beforeMotion.x,afterMotion.pose.y-beforeMotion.y)>20,'robot must visibly move by more than 20 SVG pixels');
-  assert.ok(afterMotion.cleaned_area_m2>0,'green cleaning area must represent real travelled coverage');
+  assert.ok(observed.delta_px>20,'robot must visibly move by more than 20 SVG pixels');
+  assert.ok(observed.area_m2>0,'green cleaning area must represent real travelled coverage');
   assert.match(await page.locator('#sim-stats').textContent(),/청소속도|청소 시간/);
   await page.waitForTimeout(1200);
   assert.match(await page.locator('#sim-stats').textContent(),/실제 경로 커버리지/);
