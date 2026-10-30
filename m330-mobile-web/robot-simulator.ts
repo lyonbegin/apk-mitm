@@ -108,7 +108,7 @@ function saveConfig(db,sid,floor,c){
 function baseState(robot){
  return {robot_id:robot.id,session_id:robot.session_id,floor_id:robot.floor_id,
   pose:{x:DOCK.x,y:DOCK.y,heading:0},state:'idle',battery:robot.demo_battery??82,
-  mode:'vacuum',suction:'standard',accel:20,model_version:2,dust_ml:0,water_ml:200,elapsed_s:0,distance_m:0,
+  mode:'vacuum',suction:'standard',accel:20,model_version:2,cleaning_speed_mps:SPECS.physical_speed_mps,dust_ml:0,water_ml:200,elapsed_s:0,distance_m:0,
   path:[],path_index:0,target:'all',target_total:0,visited:[],
   resume_after_charge:false,return_reason:null,events:[],last_ms:Date.now(),error:null};
 }
@@ -168,7 +168,7 @@ export function initRobotSimulator(db,getFloor){
     else {plan(s,map,config,false);if(!s.path.length){s.state='blocked';s.error='동적 장애물로 이동 가능한 청소 경로 없음';emit(s,'navigation_blocked',s.error)}} 
     emit(s,'replanned','장애물 또는 금지구역 변경으로 경로 재계획');continue;
    }
-   const length=dist(s.pose,next),speed=(s.state==='returning'?SPECS.travel_speed_mps:SPECS.physical_speed_mps)*PX_PER_M;
+   const length=dist(s.pose,next),speed=(s.state==='returning'?SPECS.travel_speed_mps:(s.cleaning_speed_mps||SPECS.physical_speed_mps))*PX_PER_M;
    const remainingTime=length/speed;
    if(length<0.0001){s.path_index++;continue}
    const moveTime=Math.min(dt,remainingTime);
@@ -225,7 +225,7 @@ export function initRobotSimulator(db,getFloor){
    coverage_percent:eligible.length?+(done.length/eligible.length*100).toFixed(1):0,
    cleaned_area_m2:+(done.length*(CELL/PX_PER_M)**2).toFixed(2),eligible_area_m2:+(eligible.length*(CELL/PX_PER_M)**2).toFixed(2),
    cell_px:CELL,grid_cols:COLS,grid_rows:ROWS,robot_radius_px:ROBOT_R,meters_per_pixel:1/PX_PER_M,
-   cleaning_speed_mps:SPECS.physical_speed_mps,travel_speed_mps:SPECS.travel_speed_mps,
+   cleaning_speed_mps:s.cleaning_speed_mps||SPECS.physical_speed_mps,travel_speed_mps:SPECS.travel_speed_mps,
    floor_width_m:1000/PX_PER_M,floor_height_m:550/PX_PER_M,
    distance_m:+s.distance_m.toFixed(2),sim_elapsed_s:+s.elapsed_s.toFixed(1),events:s.events.slice(0,15),
    sensors:{virtual:true,dt_of_range_m:15,psd_fov_deg:190,rays,cliff_detected:map.zones.some(z=>z.kind==='stairs'&&inside({x:s.pose.x+30*Math.cos(s.pose.heading*Math.PI/180),y:s.pose.y+30*Math.sin(s.pose.heading*Math.PI/180)},z))},
@@ -272,6 +272,10 @@ export function initRobotSimulator(db,getFloor){
    if(!SPECS.capability_modes.includes(args.value))throw Object.assign(new Error('지원하지 않는 청소모드'),{status:422});
    s.mode=args.value;emit(s,'mode_changed',s.mode);
    if(s.state==='cleaning')plan(s,map,cfg,false);
+  }else if(action==='set_cleaning_speed'){
+   const value=Number(args.value);
+   if(!Number.isFinite(value)||value<0.03||value>0.40)throw Object.assign(new Error('시험 청소 주행속도는 0.03~0.40m/s만 설정할 수 있습니다.'),{status:422});
+   s.cleaning_speed_mps=value;emit(s,'reference_speed_changed',value.toFixed(3)+'m/s (시험 속도)');
   }else if(action==='set_suction'){
    if(!SPECS.suction.includes(args.value))throw Object.assign(new Error('지원하지 않는 흡입 단계'),{status:422});
    s.suction=args.value;emit(s,'suction_changed',s.suction);
