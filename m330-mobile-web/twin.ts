@@ -4,7 +4,7 @@ export const TWIN_VERSION='0.4.0';
 const BUILDINGS={myeonhak:'면학동',gyeongae:'경애동'} as const;
 const FLOOR_IDS=Object.keys(BUILDINGS).flatMap(b=>[5,4,3,2,1].map(n=>b+'-'+n));
 type Zone={id:string;name:string;kind:'corridor'|'lobby'|'elevator_hall'|'entry'|'stairs';x:number;y:number;w:number;h:number;robot_cleanable:boolean;manual_cleanable:boolean};
-const getFloor=(floorId:string)=>{
+export const getFloor=(floorId:string)=>{
  const match=/^(myeonhak|gyeongae)-([1-5])$/.exec(floorId);
  if(!match)return null;
  const b=match[1] as keyof typeof BUILDINGS,n=Number(match[2]),offset=(n-3)*7+(b==='gyeongae'?8:0);
