@@ -265,7 +265,13 @@ Bun.serve({port:Number(Bun.env.PORT||3000),hostname:'0.0.0.0',async fetch(req){
   if(!Array.isArray(ids)||ids.length<1||ids.length>100||!ids.every((v:any)=>Number.isSafeInteger(v)&&v>0)||new Set(ids).size!==ids.length)return bad('서로 다른 로봇 ID 1~100개를 선택하십시오.',422);
   if(ids.some((v:number)=>!lookupRobot(sid,v)))return bad('유효하지 않은 로봇이 포함되었습니다.',404);
   try{
-   const output=db.transaction(()=>ids.map((id:number)=>simulator.command(sid,id,d.command,{zone_id:'all'})))();
+   const output=db.transaction(()=>ids.map((id:number)=>{
+    const result=simulator.command(sid,id,d.command,{zone_id:'all'});
+    db.query('INSERT INTO events(session_id,robot_id,at,title,detail,simulated) VALUES(?,?,?,?,?,1)')
+     .run(sid,id,new Date().toLocaleString('ko-KR',{timeZone:'Asia/Seoul'}),'가상 일괄 '+d.command,
+      '로봇 '+id+' / '+result.floor_id+' → 가상 주행 엔진');
+    return result;
+   }))();
    return json({ok:true,simulated:true,robot_ids:ids,affected:output.length,hardware_command:false,
     message:output.length+'대에 가상 '+d.command+' 명령을 실행했습니다. 상태·좌표가 주행 엔진에서 갱신됩니다.'});
   }catch(e:any){return bad(e.message||'일괄 명령 실패',e.status||409)}
