@@ -20,7 +20,9 @@ export const getFloor=(floorId:string)=>{
  ];
  if(isGround)zones.push({id:'entrance',name:'정문 출입구 공용부',kind:'entry',x:478+offset,y:436,w:94,h:78,robot_cleanable:true,manual_cleanable:false});
  return {id:floorId,building_id:b,building_name:BUILDINGS[b],floor_number:n,name:BUILDINGS[b]+' '+n+'층',
-  source:'illustrative_generated',is_surveyed:false,width:1000,height:550,zones,
+  source:'illustrative_generated',is_surveyed:false,width:1000,height:550,
+  meters_per_pixel:0.04,width_m:40,height_m:22,area_m2:880,
+  zones:zones.map(z=>({...z,length_m:+(z.w*0.04).toFixed(2),width_m:+(z.h*0.04).toFixed(2),floor_area_m2:+(z.w*z.h*0.04*0.04).toFixed(2)})),
   exclusions:['교실','행정실','교무실','개별 사무실','기타 실내 공간'],
   stairs_policy:'manual_only',interfloor_robot_navigation:false};
 };
