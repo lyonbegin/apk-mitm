@@ -24,6 +24,7 @@
  +'<div class="twin-filter" style="margin-top:15px"><label>청소 방식<select id="sim-mode"><option value="vacuum">흡입</option><option value="mop">물걸레</option><option value="vacuum_mop">흡입 + 물걸레</option></select></label>'
  +'<label>흡입 단계<select id="sim-suction"><option value="quiet">저소음</option><option value="standard">표준</option><option value="max">강력</option></select></label>'
  +'<label>시뮬레이션 배속<select id="sim-speed"><option value="1">1배 (실시간)</option><option value="5">5배</option><option value="20">20배</option><option value="100">100배 (배터리 테스트)</option></select></label></div>'
+ +'<div class="twin-filter"><label>청소 주행속도 (m/s, 실측 전 시험값)<input id="sim-real-speed" type="number" inputmode="decimal" min="0.03" max="0.4" step="0.005" value="0.0783"></label><button id="sim-set-real-speed" class="primary" style="padding:12px">속도 보정 적용</button></div>'
  +'<div id="sim-stats" class="twin-overview"></div><div style="margin-top:10px" class="twin-progress"><div id="sim-progress-bar" style="width:0%"></div></div><p id="sim-progress-label" class="twin-help"></p>'
  +'<div class="twin-actions"><button id="sim-empty">먼지통 비움</button><button id="sim-refill">물통 보충</button></div></div>'
  +'<div class="twin-panel"><b>시험 환경 조작</b><p>지도에서 임의의 장애물을 추가하면 가상 로봇이 감지하고 경로를 다시 계산합니다.</p>'
@@ -115,6 +116,7 @@
   clearMsg(r?('가상 상태: '+(STATUS[r.state]||r.state)+' · 물리모델 미보정 · 실기기와 미연결'):'이 층에 로봇이 없습니다. 홈에서 해당 층에 로봇을 등록하십시오.');
   if(r){
    el('sim-mode').value=r.mode;el('sim-suction').value=r.suction;el('sim-speed').value=String(r.speed_factor);
+   if(document.activeElement!==el('sim-real-speed'))el('sim-real-speed').value=Number(r.cleaning_speed_mps).toFixed(4);
    const activeZone=data.map.zones.find(z=>z.id===selectedZone);
    const t=[['상태',STATUS[r.state]||r.state],['배터리',r.battery+'%'],['청소 면적',r.cleaned_area_m2+' / '+r.eligible_area_m2+'㎡'],
     ['실제 경로 커버리지',r.coverage_percent+'%'],['주행거리',r.distance_m+'m'],['청소 시간',(r.sim_elapsed_s/60).toFixed(1)+'분 (가상)'],
@@ -149,7 +151,7 @@
  }
  async function command(action,payload={}){
   if(!robotId){clearMsg('로봇을 선택하십시오.');return}
-  if(action==='start')followRobot=true;
+  if(action==='start'){followRobot=true;el('sim-follow').textContent='로봇 따라가기: 켜짐';}
   try{
    await api('/api/sim/command',{robot_id:robotId,action,...payload});
    await load(true);
@@ -170,6 +172,7 @@
  el('sim-empty').addEventListener('click',()=>command('empty_dust'));
  el('sim-refill').addEventListener('click',()=>command('refill_water'));
  el('sim-set-battery').addEventListener('click',()=>command('inject_battery',{value:Number(el('sim-battery').value)}));
+ el('sim-set-real-speed').addEventListener('click',()=>command('set_cleaning_speed',{value:Number(el('sim-real-speed').value)}));
  el('sim-nogo').addEventListener('click',()=>selectedZone==='all'?clearMsg('지도에서 개별 청소구역을 선택한 뒤 금지구역을 변경하십시오.'):mapCommand('toggle_no_go',{zone_id:selectedZone}));
  el('sim-clearobstacles').addEventListener('click',()=>mapCommand('clear_obstacles'));
  el('sim-addobstacle').addEventListener('click',()=>{placeObstacle=!placeObstacle;el('sim-addobstacle').textContent=placeObstacle?'지도에서 장애물 설치 위치를 누르세요':'지도 클릭: 장애물 설치'});
