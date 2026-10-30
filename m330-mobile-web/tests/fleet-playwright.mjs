@@ -55,8 +55,23 @@ try {
   await page.locator('#sim-stop').click();
   await page.waitForFunction(() => document.querySelector('#sim-warning')?.textContent?.includes('대기'),null,{timeout:12000});
   await page.locator('#sim-zone').selectOption('corridor-center');
+  await page.locator('#sim-real-speed').fill('0.1');
+  await page.locator('#sim-set-real-speed').click();
+  await page.waitForFunction(() => document.getElementById('sim-stats')?.textContent?.includes('0.100m/s'),null,{timeout:15000});
+  const beforeMotion=await page.evaluate(async()=>{const j=await (await fetch('/api/sim/state?floor_id=myeonhak-5')).json();return j.robots[0].pose;});
+  await page.locator('#sim-svg').screenshot({path:'sim-before.png'});
   await page.locator('#sim-start').click();
   await page.waitForFunction(() => document.querySelector('#sim-warning')?.textContent?.includes('청소 중'),null,{timeout:12000});
+  await page.waitForFunction(async start=>{
+   const j=await (await fetch('/api/sim/state?floor_id=myeonhak-5')).json();
+   const r=j.robots[0];
+   return Math.hypot(r.pose.x-start.x,r.pose.y-start.y)>20&&r.cleaned_cells>0&&r.distance_m>0.8;
+  },beforeMotion,{timeout:20000});
+  await page.locator('#sim-svg').screenshot({path:'sim-after.png'});
+  const afterMotion=await page.evaluate(async()=>{const j=await (await fetch('/api/sim/state?floor_id=myeonhak-5')).json();return j.robots[0];});
+  assert.ok(Math.hypot(afterMotion.pose.x-beforeMotion.x,afterMotion.pose.y-beforeMotion.y)>20,'robot must visibly move by more than 20 SVG pixels');
+  assert.ok(afterMotion.cleaned_area_m2>0,'green cleaning area must represent real travelled coverage');
+  assert.match(await page.locator('#sim-stats').textContent(),/청소속도|청소 시간/);
   await page.waitForTimeout(1200);
   assert.match(await page.locator('#sim-stats').textContent(),/실제 경로 커버리지/);
   await page.locator('#sim-pause').click();
@@ -67,7 +82,7 @@ try {
   await page.waitForFunction(() => /복귀|충전/.test(document.querySelector('#sim-warning')?.textContent||''),null,{timeout:12000});
 
   assert.deepEqual(pageErrors,[],'no uncaught browser JS errors');
-  console.log('PASS fleet & M330 motion twin Chromium: live control, footprint map, stair avoidance, coverage, pause/resume/dock, JS errors');
+  console.log('PASS fleet & M330 motion twin Chromium: 20px+ physical movement, visible coverage, real metre scale, live control, pause/resume/dock, JS errors');
 } finally {
  await context.close();
  await browser.close();
