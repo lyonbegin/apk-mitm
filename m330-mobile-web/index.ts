@@ -240,12 +240,18 @@ Bun.serve({port:Number(Bun.env.PORT||3000),hostname:'0.0.0.0',async fetch(req){
  }
  if(p==='/api/dashboard'&&req.method==='GET'){
   const list=robotsOf(sid), selected=lookupRobot(sid,u.searchParams.get('robot_id'));
-  const robot=selected?exposeRobot(selected):null;
+  const present=(r:any)=>{
+   const info=simulator.getRobot(sid,r.id),t=simulator.snapshot(info.s,info.map,info.cfg);
+   const labels:Record<string,string>={idle:'대기',cleaning:'청소 중',paused:'일시정지',returning:'충전 복귀 중',charging:'충전 중',completed:'청소 완료',blocked:'이동 불가'};
+   return {...exposeRobot(r),status:labels[t.state]||t.state,battery:Math.round(t.battery),sim_state:t.state,coverage_percent:t.coverage_percent,pose:t.pose,
+    cleaned_area_m2:t.cleaned_area_m2,simulated_motion:true};
+  };
+  const robot=selected?present(selected):null;
   const tasks=db.query('SELECT t.*,r.name AS robot_name FROM tasks t JOIN robots r ON r.id=t.robot_id WHERE t.session_id=? AND r.active=1 ORDER BY t.id DESC LIMIT 300').all(sid);
   const events=db.query('SELECT e.*,r.name AS robot_name FROM events e JOIN robots r ON r.id=e.robot_id WHERE e.session_id=? ORDER BY e.id DESC LIMIT 300').all(sid);
-  return json({mode:'demo',fleet:true,robot,robots:list.map(exposeRobot),buildings,tasks,events,
+  return json({mode:'robot_motion_simulation',fleet:true,robot,robots:list.map(present),buildings,tasks,events,
    demo_controls_enabled:true,real_control_enabled:false,gateway:robot?.gateway||null,
-   features:{map:'not_integrated',schedules:'planning_only',real_write_verified:false,storage:'persistent_sqlite'},updated_at:new Date().toISOString()});
+   features:{map:'synthetic_robot_motion',schedules:'planning_only',real_write_verified:false,storage:'persistent_sqlite'},updated_at:new Date().toISOString()});
  }
  if(p==='/api/diagnostics'&&req.method==='GET'){
   const r=lookupRobot(sid,u.searchParams.get('robot_id'));
@@ -254,41 +260,27 @@ Bun.serve({port:Number(Bun.env.PORT||3000),hostname:'0.0.0.0',async fetch(req){
 
  if(p==='/api/commands/batch'&&req.method==='POST'){
   let d:any;try{d=await readJson(req)}catch(e){return bad(messageError(e))}
-  const labels:any={start:'청소 시작',pause:'일시정지',dock:'충전 복귀'};
-  if(!d||!Object.hasOwn(labels,d.command))return bad('일괄 명령이 올바르지 않습니다.',422);
+  if(!['start','pause','dock'].includes(d?.command))return bad('일괄 명령 오류',422);
   const ids=d.robot_ids;
-  if(!Array.isArray(ids)||ids.length<1||ids.length>100||!ids.every((v:any)=>Number.isSafeInteger(v)&&v>0)||new Set(ids).size!==ids.length)return bad('서로 다른 로봇 ID를 1~100개 선택하십시오.',422);
-  const chosen=ids.map((id:number)=>lookupRobot(sid,id));
-  if(chosen.some(r=>!r))return bad('다른 세션의 로봇 또는 등록 해제된 로봇이 포함되었습니다.',404);
-  const run=db.transaction(()=>{
-   for(const r of chosen){
-    let status=r.demo_status,battery=r.demo_battery;
-    if(d.command==='start'){status='청소 중';battery=Math.max(0,battery-1);}
-    if(d.command==='pause')status='일시정지';
-    if(d.command==='dock')status='충전 복귀 중';
-    db.query('UPDATE robots SET demo_status=?,demo_battery=? WHERE session_id=? AND id=?').run(status,battery,sid,r.id);
-    db.query('INSERT INTO events(session_id,robot_id,at,title,detail,simulated) VALUES(?,?,?,?,?,1)')
-     .run(sid,r.id,new Date().toLocaleString('ko-KR',{timeZone:'Asia/Seoul'}),labels[d.command],r.name+' / '+floorLabel(r.floor_id)+' · 일괄 데모');
-   }
-  });
-  run();
-  return json({ok:true,simulated:true,robot_ids:ids,affected:ids.length,message:ids.length+'대 '+labels[d.command]+' — 실기기 명령 없이 시뮬레이션만 실행했습니다.'});
+  if(!Array.isArray(ids)||ids.length<1||ids.length>100||!ids.every((v:any)=>Number.isSafeInteger(v)&&v>0)||new Set(ids).size!==ids.length)return bad('서로 다른 로봇 ID 1~100개를 선택하십시오.',422);
+  if(ids.some((v:number)=>!lookupRobot(sid,v)))return bad('유효하지 않은 로봇이 포함되었습니다.',404);
+  try{
+   const output=db.transaction(()=>ids.map((id:number)=>simulator.command(sid,id,d.command,{zone_id:'all'})))();
+   return json({ok:true,simulated:true,robot_ids:ids,affected:output.length,hardware_command:false,
+    message:output.length+'대에 가상 '+d.command+' 명령을 실행했습니다. 상태·좌표가 주행 엔진에서 갱신됩니다.'});
+  }catch(e:any){return bad(e.message||'일괄 명령 실패',e.status||409)}
  }
  if(p==='/api/command'&&req.method==='POST'){
   let d:any;try{d=await readJson(req)}catch(e){return bad(messageError(e))}
   const r=lookupRobot(sid,d?.robot_id);if(!r)return bad('로봇을 찾을 수 없습니다.',404);
-  const labels:any={start:'청소 시작',pause:'일시정지',dock:'충전 복귀'};
-  if(!Object.hasOwn(labels,d.command))return bad('지원하지 않는 명령');
-  const floor=d.floor_id||r.floor_id;
-  if(d.command==='start'&&!validFloors.has(floor))return bad('청소할 층을 선택해 주세요.',422);
-  let status=r.demo_status,battery=r.demo_battery;
-  if(d.command==='start'){status='청소 중';battery=Math.max(0,battery-1);}
-  if(d.command==='pause')status='일시정지';
-  if(d.command==='dock')status='충전 복귀 중';
-  db.query('UPDATE robots SET demo_status=?,demo_battery=? WHERE id=? AND session_id=?').run(status,battery,r.id,sid);
-  db.query('INSERT INTO events(session_id,robot_id,at,title,detail,simulated) VALUES(?,?,?,?,?,1)')
-   .run(sid,r.id,new Date().toLocaleString('ko-KR',{timeZone:'Asia/Seoul'}),labels[d.command],r.name+' / '+floorLabel(floor)+' · 가상 명령');
-  return json({ok:true,robot_id:r.id,simulated:true,message:r.name+': '+labels[d.command]+' — 시뮬레이션만 실행했습니다.'});
+  if(!['start','pause','dock'].includes(d.command))return bad('지원하지 않는 명령',422);
+  try{
+   const state=simulator.command(sid,r.id,d.command,{zone_id:'all'});
+   db.query('INSERT INTO events(session_id,robot_id,at,title,detail,simulated) VALUES(?,?,?,?,?,1)')
+    .run(sid,r.id,new Date().toLocaleString('ko-KR',{timeZone:'Asia/Seoul'}),'가상 '+d.command,r.name+' / '+floorLabel(r.floor_id)+' → 가상 로봇 엔진');
+   return json({ok:true,robot_id:r.id,simulated:true,hardware_command:false,robot_state:state.state,pose:state.pose,
+    message:r.name+': '+d.command+' — 가상 로봇이 경로·위치·배터리 연산을 수행합니다.'});
+  }catch(e:any){return bad(e.message||'로봇 명령 실패',e.status||409)}
  }
  if(p==='/api/tasks'&&req.method==='POST'){
   let d:any;try{d=await readJson(req)}catch(e){return bad(messageError(e))}
