@@ -42,3 +42,11 @@ jobs:
         env:
           M330_BASE: http://localhost:3000/
         run: node fleet-playwright.mjs
+      - name: Upload before-and-after robot movement screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m330-map-motion-evidence
+          path: m330-mobile-web/tests/sim-*.png
+          if-no-files-found: ignore
+          retention-days: 14
