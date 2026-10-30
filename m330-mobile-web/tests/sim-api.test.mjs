@@ -55,7 +55,7 @@ assert.ok(['returning','charging'].includes(afterDock.state),JSON.stringify(afte
 assert.ok(afterDock.events.some(x=>x.type==='return_to_dock'));
 const charged=(await call('/api/sim/step',{robot_id:first,seconds:15500})).robot;
 assert.ok(charged.events.some(x=>x.type==='cleaning_resumed'),'charged robot must resume unfinished cleaning route');
-const second=await call('/api/robots',{name:'로봇-2',floor_id:'gyeongae-3'});
+const second=await call('/api/robots',{name:'로봇-2',floor_id:'gyeongae-3'},201);
 assert.ok(second.robot.id!==first);
 const secondState=await call('/api/sim/state?floor_id=gyeongae-3');
 assert.equal(secondState.robots.length,1);
