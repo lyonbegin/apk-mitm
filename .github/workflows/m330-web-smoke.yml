@@ -163,8 +163,10 @@ jobs:
             sleep 3
           done
           curl -fsS "$BASE/api/health" | jq -e '.common_areas_only==true and .stairs_robot_cleanable==false'
-          curl -fsS "$BASE/twin-client.js" | grep -q '공용부 청소 디지털 트윈'
-          curl -fsS "$BASE/twin.css" | grep -q 'twin-stairs'
+          curl -fsS "$BASE/twin-client.js" -o /tmp/twin-ui.js
+          grep -q '공용부 청소 디지털 트윈' /tmp/twin-ui.js
+          curl -fsS "$BASE/twin.css" -o /tmp/twin-styles.css
+          grep -q 'twin-stairs' /tmp/twin-styles.css
           jar=/tmp/twin-cookie
           curl -fsS -c "$jar" -b "$jar" "$BASE/api/dashboard" > /tmp/twin-before.json
           robot=$(jq -r '.robots[0].id' /tmp/twin-before.json)
