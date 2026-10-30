@@ -39,10 +39,11 @@ jobs:
           done
           grep -q "M330" <(curl -fsS "$BASE/")
           curl -fsS -c /tmp/m330-cookie -b /tmp/m330-cookie "$BASE/api/dashboard" >/tmp/before.json
-          jq -e '.mode=="demo" and .features.real_write_verified == false' /tmp/before.json
+          jq -e '.mode=="robot_motion_simulation" and .features.real_write_verified == false' /tmp/before.json
+          robot=$(jq -r '.robots[0].id' /tmp/before.json)
           curl -fsS -c /tmp/m330-cookie -b /tmp/m330-cookie \
             -H "Content-Type: application/json" \
-            -d '{"floor_id":"myeonhak-3","time":"08:30","weekdays":"0,1,2,3,4"}' \
+            -d "{\"robot_id\":$robot,\"floor_id\":\"myeonhak-3\",\"time\":\"08:30\",\"weekdays\":\"0,1,2,3,4\"}" \
             "$BASE/api/tasks" >/tmp/created.json
           id=$(jq -r '.id' /tmp/created.json)
           test "$id" != null
@@ -52,9 +53,9 @@ jobs:
           curl -fsS -b /tmp/m330-cookie -X DELETE "$BASE/api/tasks/$id" | jq -e '.ok == true'
           curl -fsS -b /tmp/m330-cookie "$BASE/api/dashboard" | jq -e --argjson id "$id" '.tasks | all(.id != $id)'
           curl -fsS -b /tmp/m330-cookie -H 'Content-Type: application/json' \
-            -d '{"command":"start","floor_id":"myeonhak-3"}' \
+            -d "{\"robot_id\":$robot,\"command\":\"start\"}" \
             "$BASE/api/command" | jq -e '.simulated==true'
-          echo "PASS: UI, persistent SQLite schedule CRUD, cookie isolation, demo-only commands"
+          echo "PASS: UI, persistent SQLite schedule CRUD, cookie isolation, virtual robot movement commands"
 
       - name: Verify read-only LAN bridge API without a robot
         shell: bash
@@ -90,10 +91,10 @@ jobs:
         run: |
           set -euo pipefail
           for n in $(seq 1 30); do
-            if curl -fsS --max-time 8 "$BASE/api/health" | jq -e '.version=="0.3.0" and .fleet==true' >/dev/null; then break; fi
+            if curl -fsS --max-time 8 "$BASE/api/health" | jq -e '.version=="0.5.0" and .fleet==true' >/dev/null; then break; fi
             sleep 3
           done
-          curl -fsS "$BASE/api/health" | jq -e '.fleet==true and .version=="0.3.0"'
+          curl -fsS "$BASE/api/health" | jq -e '.fleet==true and .version=="0.5.0"'
           jar=/tmp/m330-fleet-cookie
           curl -fsS -c "$jar" -b "$jar" "$BASE/api/dashboard" > /tmp/fleet-start.json
           first=$(jq -r '.robots[0].id' /tmp/fleet-start.json)
@@ -113,6 +114,8 @@ jobs:
           curl -fsS -b "$jar" "$BASE/api/dashboard" | jq -e \
             --argjson first "$first" --argjson second "$second" \
             '.robots | (map(select(.id==$first))[0].status=="청소 중") and (map(select(.id==$second))[0].status=="대기")'
+          curl -fsS -b "$jar" -H 'Content-Type: application/json' \
+            -d "{\"robot_id\":$first,\"action\":\"stop\"}" "$BASE/api/sim/command" | jq -e '.ok'
           curl -fsS -b "$jar" -H 'Content-Type: application/json' \
             -d "{\"command\":\"start\",\"robot_ids\":[$first,$second]}" "$BASE/api/commands/batch" | jq -e '.simulated==true and .affected==2'
           curl -fsS -b "$jar" "$BASE/api/dashboard" | jq -e \
@@ -156,7 +159,7 @@ jobs:
         run: |
           set -euo pipefail
           for n in $(seq 1 30); do
-            if curl -fsS --max-time 8 "$BASE/api/health" | jq -e '.version=="0.4.0" and .stairs_included==true' >/dev/null; then break; fi
+            if curl -fsS --max-time 8 "$BASE/api/health" | jq -e '.version=="0.5.0" and .stairs_included==true' >/dev/null; then break; fi
             sleep 3
           done
           curl -fsS "$BASE/api/health" | jq -e '.common_areas_only==true and .stairs_robot_cleanable==false'
