@@ -32,6 +32,11 @@ jobs:
         run: |
           npm install --no-audit --no-fund
           npx playwright install --with-deps chromium
+      - name: Verify robot motion simulation engine
+        working-directory: m330-mobile-web/tests
+        env:
+          M330_BASE: http://localhost:3000/
+        run: node sim-api.test.mjs
       - name: Verify mobile fleet and staircase twin UI in local Chromium
         working-directory: m330-mobile-web/tests
         env:
