@@ -1,27 +1,32 @@
 /* M330 Pro feature-level digital simulator.
  * Synthetic 2D environment. Physics/algorithms are representative, NOT Lefant firmware.
- * Data units: px on test map (100px == 1 metre). Robot footprint diameter 28px (280mm).
+ * Geometry units: SVG px, 25px=1m. High-resolution coverage grid: 5px=0.2m.
  * M330 capabilities from official marketing/user guide; unverified speed/current/threshold are tunable assumptions.
  */
-const CELL=20, COLS=50, ROWS=28, ROBOT_R=14, SAFE_R=16, DOCK={x:510,y:270};
+const PX_PER_M=25, CELL=5, COLS=200, ROWS=110, ROBOT_R=0.14*PX_PER_M, CLEAN_R=0.11*PX_PER_M, SAFE_R=ROBOT_R+0.8, DOCK={x:510,y:270};
 const SPECS={
  model:'Lefant M330 Pro', diameter_m:0.28,height_m:0.095,
  sensing:['dToF navigation','PSD obstacle avoidance','cliff prevention'],
  lidar_range_m:15, psd_fov_degrees:190, dustbin_ml:450, water_tank_ml:200,
  battery_capacity_mah:2600,reference_runtime_s:9000, reference_charge_s:19800,
- physical_speed_mps:0.22, battery_return_threshold:20,
+ official_coverage_m2_per_charge:155, assumed_cleaning_width_m:0.22,
+ // 155m² / (150min * 0.22m) = 0.0783m/s under 100% effective-coverage assumption.
+ physical_speed_mps:0.0783, travel_speed_mps:0.18, battery_return_threshold:20,
+ floor_scale_m_per_px:1/PX_PER_M, floor_width_m:1000/PX_PER_M, floor_height_m:550/PX_PER_M,
+ grid_resolution_m:CELL/PX_PER_M, reference_speed_calculation:'155 m² / (9000 s × assumed 0.22 m sweep width) = 0.0783 m/s',
  capability_modes:['vacuum','mop','vacuum_mop'], suction:['quiet','standard','max'],
  verified_speeds:false,verified_power_curve:false,verified_mapping_algorithm:false,
- notes:'Dimensions/capabilities are sourced. Numeric speed, discharge, refill and dock thresholds are simulation assumptions.'
+ notes:'M330 Pro published travel/cleaning velocity is not verified; 0.0783m/s derives from advertised 155m², 150min and an ASSUMED 0.22m effective sweep width, not a manufacturer speed measurement. All geometry is synthetic.'
 };
-const xy=(id)=>({x:(id%COLS)*CELL+10,y:Math.floor(id/COLS)*CELL+10});
+const xy=(id)=>({x:(id%COLS)*CELL+CELL/2,y:Math.floor(id/COLS)*CELL+CELL/2});
 const gid=(x,y)=>Math.floor(x/CELL)+Math.floor(y/CELL)*COLS;
 const inside=(p,z)=>p.x>=z.x&&p.x<=z.x+z.w&&p.y>=z.y&&p.y<=z.y+z.h;
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 function emit(s,type,detail=''){s.events=(s.events||[]).slice(-24);s.events.unshift({type,detail,sim_time_s:Math.round(s.elapsed_s||0),at:new Date().toISOString()});}
 function safePositions(map,config,mode){
  const zones=map.zones.filter(z=>z.robot_cleanable&&!config.no_go.includes(z.id));
- const points=[[0,0],[SAFE_R,0],[-SAFE_R,0],[0,SAFE_R],[0,-SAFE_R],[11,11],[-11,11],[11,-11],[-11,-11]];
+ const d=SAFE_R/Math.sqrt(2);
+ const points=[[0,0],[SAFE_R,0],[-SAFE_R,0],[0,SAFE_R],[0,-SAFE_R],[d,d],[-d,d],[d,-d],[-d,-d]];
  const allowed=(p)=>points.every(([a,b])=>{
   const q={x:p.x+a,y:p.y+b};
   if(!zones.some(z=>inside(q,z)))return false;
@@ -39,6 +44,7 @@ const nbr=id=>[id-1,id+1,id-COLS,id+COLS].filter(v=>v>=0&&v<COLS*ROWS&&((v===id-
 function nearest(p,open){let id=null,best=Infinity;for(const v of open){let d=dist(p,xy(v));if(d<best){best=d;id=v}}return id;}
 function astar(a,b,open){
  if(a==null||b==null||!open.has(a)||!open.has(b))return null;
+ if(nbr(a).includes(b))return [a,b];
  if(a===b)return [a];
  const frontier=[a],g=new Map([[a,0]]),parent=new Map(),closed=new Set(),h=id=>Math.abs(id%COLS-b%COLS)+Math.abs(Math.floor(id/COLS)-Math.floor(b/COLS));
  while(frontier.length){
@@ -73,7 +79,15 @@ function plan(s,map,config,returnToDock=false){
   const target=nearest(DOCK,open);
   targets=target==null?[]:[target];
  }
- let path=[],current=start,skipped=0;
+ // Only cells connected to the current docking/robot component are robot-accessible.
+ // Avoid asking A* to reach disconnected hall sections thousands of times.
+ const reachable=new Set(start===null?[]:[start]),queue=start===null?[]:[start];
+ for(let h=0;h<queue.length;h++){for(const n of nbr(queue[h])){
+  if(open.has(n)&&!reachable.has(n)){reachable.add(n);queue.push(n)}
+ }}
+ const inaccessible=targets.length;
+ targets=targets.filter(id=>reachable.has(id));
+ let path=[],current=start,skipped=inaccessible-targets.length;
  for(const target of targets){
   if(current===target){if(!path.length)path.push(target);continue}
   const segment=astar(current,target,open);
@@ -94,7 +108,7 @@ function saveConfig(db,sid,floor,c){
 function baseState(robot){
  return {robot_id:robot.id,session_id:robot.session_id,floor_id:robot.floor_id,
   pose:{x:DOCK.x,y:DOCK.y,heading:0},state:'idle',battery:robot.demo_battery??82,
-  mode:'vacuum',suction:'standard',accel:5,dust_ml:0,water_ml:200,elapsed_s:0,distance_m:0,
+  mode:'vacuum',suction:'standard',accel:20,model_version:2,dust_ml:0,water_ml:200,elapsed_s:0,distance_m:0,
   path:[],path_index:0,target:'all',target_total:0,visited:[],
   resume_after_charge:false,return_reason:null,events:[],last_ms:Date.now(),error:null};
 }
@@ -104,7 +118,7 @@ export function initRobotSimulator(db,getFloor){
  function load(sid,robot){
   const row=db.query('SELECT payload FROM sim_states WHERE robot_id=? AND session_id=?').get(robot.id,sid);
   let s=row?JSON.parse(row.payload):baseState(robot);
-  if(s.floor_id!==robot.floor_id){
+  if(s.floor_id!==robot.floor_id||s.model_version!==2){
    s=baseState(robot);emit(s,'manual_floor_transfer','로봇이 관리화면에서 새 층으로 수동 재배치됨');
   }
   return s;
@@ -154,7 +168,7 @@ export function initRobotSimulator(db,getFloor){
     else {plan(s,map,config,false);if(!s.path.length){s.state='blocked';s.error='동적 장애물로 이동 가능한 청소 경로 없음';emit(s,'navigation_blocked',s.error)}} 
     emit(s,'replanned','장애물 또는 금지구역 변경으로 경로 재계획');continue;
    }
-   const length=dist(s.pose,next),speed=SPECS.physical_speed_mps*100;
+   const length=dist(s.pose,next),speed=(s.state==='returning'?SPECS.travel_speed_mps:SPECS.physical_speed_mps)*PX_PER_M;
    const remainingTime=length/speed;
    if(length<0.0001){s.path_index++;continue}
    const moveTime=Math.min(dt,remainingTime);
@@ -164,14 +178,14 @@ export function initRobotSimulator(db,getFloor){
     y:+(s.pose.y+(next.y-s.pose.y)*fraction).toFixed(3),
     heading:+(Math.atan2(next.y-s.pose.y,next.x-s.pose.x)*180/Math.PI).toFixed(2)};
    if(fraction>=0.9999){s.pose.x=next.x;s.pose.y=next.y;s.path_index++}
-   s.elapsed_s+=moveTime;s.distance_m+=moved/100;
+   s.elapsed_s+=moveTime;s.distance_m+=moved/PX_PER_M;
    const rate=100/SPECS.reference_runtime_s*(s.suction==='max'?1.4:s.suction==='quiet'?.8:1);
    s.battery=Math.max(0,s.battery-rate*moveTime*(s.state==='returning'?.65:1));
    if(s.state==='cleaning'){
     for(let y=Math.max(0,Math.floor((s.pose.y-ROBOT_R)/CELL));y<=Math.min(ROWS-1,Math.floor((s.pose.y+ROBOT_R)/CELL));y++){
      for(let x=Math.max(0,Math.floor((s.pose.x-ROBOT_R)/CELL));x<=Math.min(COLS-1,Math.floor((s.pose.x+ROBOT_R)/CELL));x++){
       const id=y*COLS+x;
-      if(dist(s.pose,xy(id))<=ROBOT_R+3&&open.has(id)&&map.zones.some(z=>z.robot_cleanable&&(s.target==='all'||z.id===s.target)&&inside(xy(id),z))){
+      if(dist(s.pose,xy(id))<=CLEAN_R+Math.SQRT2*CELL/4&&open.has(id)&&map.zones.some(z=>z.robot_cleanable&&(s.target==='all'||z.id===s.target)&&inside(xy(id),z))){
        vis.add(id);
       }
      }
@@ -198,7 +212,7 @@ export function initRobotSimulator(db,getFloor){
    const angle=(s.pose.heading+i*19)*Math.PI/180;
    let reached=SPECS.lidar_range_m;
    for(let d=0.2;d<=SPECS.lidar_range_m;d+=.2){
-    const p={x:s.pose.x+Math.cos(angle)*d*100,y:s.pose.y+Math.sin(angle)*d*100};
+    const p={x:s.pose.x+Math.cos(angle)*d*PX_PER_M,y:s.pose.y+Math.sin(angle)*d*PX_PER_M};
     const cell=gid(p.x,p.y);
     if(cell<0||cell>=COLS*ROWS||!open.has(cell)){reached=d;break}
    }
@@ -209,7 +223,10 @@ export function initRobotSimulator(db,getFloor){
    path:s.path.slice(s.path_index,Math.min(s.path_index+220,s.path.length)).map(xy),total_path_cells:s.path.length,
    visited:s.visited,eligible_cells:eligible.length,cleaned_cells:done.length,
    coverage_percent:eligible.length?+(done.length/eligible.length*100).toFixed(1):0,
-   cleaned_area_m2:+(done.length*.04).toFixed(2),eligible_area_m2:+(eligible.length*.04).toFixed(2),
+   cleaned_area_m2:+(done.length*(CELL/PX_PER_M)**2).toFixed(2),eligible_area_m2:+(eligible.length*(CELL/PX_PER_M)**2).toFixed(2),
+   cell_px:CELL,grid_cols:COLS,grid_rows:ROWS,robot_radius_px:ROBOT_R,meters_per_pixel:1/PX_PER_M,
+   cleaning_speed_mps:SPECS.physical_speed_mps,travel_speed_mps:SPECS.travel_speed_mps,
+   floor_width_m:1000/PX_PER_M,floor_height_m:550/PX_PER_M,
    distance_m:+s.distance_m.toFixed(2),sim_elapsed_s:+s.elapsed_s.toFixed(1),events:s.events.slice(0,15),
    sensors:{virtual:true,dt_of_range_m:15,psd_fov_deg:190,rays,cliff_detected:map.zones.some(z=>z.kind==='stairs'&&inside({x:s.pose.x+30*Math.cos(s.pose.heading*Math.PI/180),y:s.pose.y+30*Math.sin(s.pose.heading*Math.PI/180)},z))},
    return_reason:s.return_reason,auto_resume:s.resume_after_charge,error:s.error,
