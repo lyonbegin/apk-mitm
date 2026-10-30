@@ -10,6 +10,7 @@
  const STATUS={idle:'대기',cleaning:'청소 중',paused:'일시정지',returning:'충전소 복귀',charging:'충전 중',completed:'청소 완료',blocked:'장애물/이동 불가'};
  root.innerHTML='<div class="over">M330 PRO / ROBOT DIGITAL TWIN</div><h1>실동작 기반 가상 청소</h1>'
  +'<p class="muted">관리 명령 → 가상 센서/경로계산 → 로봇 이동 → 실제 통과한 바닥 셀 청소 처리. 실기기 연결 없이 동작하며, 속도·소모량은 보정 전 시뮬레이션 가정값입니다.</p>'
+ +'<p class="twin-help">현재 선택: <b id="map-floor">면학동 5층</b></p>'
  +'<div class="twin-filter"><label>건물<select id="sim-building"><option value="myeonhak">면학동</option><option value="gyeongae">경애동</option></select></label>'
  +'<label>층<select id="sim-floor"><option value="5">5층</option><option value="4">4층</option><option value="3">3층</option><option value="2">2층</option><option value="1">1층</option></select></label></div>'
  +'<div class="twin-map-wrap" style="position:relative"><svg id="sim-svg" role="img" aria-label="공용부 가상 로봇 실동작 시뮬레이션" viewBox="0 0 1000 550" style="width:100%;display:block"></svg>'
