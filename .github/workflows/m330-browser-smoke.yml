@@ -37,6 +37,23 @@ jobs:
           python3 -m py_compile m330-mobile-web/gateway/m3_onboard.py m330-mobile-web/gateway/m3_wifi_local.py m330-mobile-web/gateway/test_m3_wifi.py
           python3 m330-mobile-web/gateway/m3_onboard.py --simulate | grep -q '"commands_enabled": false'
           python3 -m unittest discover -s m330-mobile-web/gateway -p 'test_m3_wifi.py' -v
+      - name: Verify localhost Wi-Fi operator page and deny unsolicited HTTP writes
+        shell: bash
+        run: |
+          python3 m330-mobile-web/gateway/m3_wifi_local.py >/tmp/m3-wifi-local.log 2>&1 &
+          helper_pid=$!
+          trap 'kill "$helper_pid" 2>/dev/null || true' EXIT
+          for n in $(seq 1 15); do
+            if curl --fail --silent http://127.0.0.1:8765/ > /tmp/m3-wifi-page.html; then break; fi
+            sleep 1
+          done
+          grep -q 'M3 Max Wi-Fi 연결' /tmp/m3-wifi-page.html
+          grep -q 'Wi-Fi AP 접속' /tmp/m3-wifi-page.html
+          http_code=$(curl --silent --output /tmp/m3-wifi-denied.json --write-out '%{http_code}' \
+            -X POST http://127.0.0.1:8765/api/join \
+            -H 'Content-Type: application/json' --data '{"ssid":"SmartLife"}')
+          test "$http_code" = 403
+
       - name: Verify robot motion simulation engine
         working-directory: m330-mobile-web/tests
         env:
