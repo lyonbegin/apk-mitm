@@ -11,6 +11,12 @@ page.on('dialog', dialog => dialog.accept());
 try {
   await page.goto(BASE, {waitUntil:'domcontentloaded', timeout:30000});
   await page.waitForFunction(() => document.querySelectorAll('#robot-select option').length>0, null, {timeout:20000});
+  // Wi-Fi-only M3 onboarding must not expose any Bluetooth action in the web.
+  assert.equal(await page.locator('button[onclick*="Bluetooth"],button[onclick*="Ble"]').count(),0);
+  assert.equal(await page.locator('a[href="http://127.0.0.1:8765/"]').count(),1);
+  assert.equal(await page.locator('#m3-discovery-status').count(),1);
+  assert.equal(await page.locator('#new-robot-model option[value="M3 Max"]').count(),1);
+
   const firstId = Number(await page.locator('#robot-select').inputValue());
   assert.ok(firstId>0, 'default robot must exist');
   assert.equal(await page.locator('#fleet-cards .fleetcard').count(),1);
