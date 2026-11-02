@@ -29,7 +29,17 @@ const BRIDGE_PANEL = `
 <pre id="m330-bridge-key" hidden></pre>
 <pre id="m330-bridge-observation">실제 장치 관측 정보 없음</pre>
 <p>현장 도구: <code>gateway/m330_lan_probe.py</code> · <code>gateway/m330_bridge.py</code>. 웹에서 로봇이 자동 발견되는 방식은 아닙니다.</p>
-</div>`;
+
+<section style="margin-top:14px;padding:12px;border:1px solid #aaa;border-radius:8px" aria-label="M3 Max 실제 기기 등록 진단">
+<h3>M3 Max 실기기 발견 · 공식 앱 없이 준비</h3>
+<p><b>현재 구현: BLE 후보 검색, 로컬 Wi-Fi/AP 후보 검색, Tuya LAN 후보 검색 결과를 현장 PC에서 받아 표시합니다.</b> 발견만으로 등록이나 제어가 완료되지는 않습니다.</p>
+<ol><li>M3 Max 전원을 켜고 설명서에 따른 약 6초 네트워크 등록모드로 진입합니다.</li>
+<li>같은 장소의 PC/Mac에서 <code>python3 m3_onboard.py --scan --push</code>를 실행합니다. 위의 「연결키 새로 발급」으로 발급한 키를 PC의 <code>M330_BRIDGE_KEY</code>에 설정해야 합니다.</li>
+<li>아래 검색 결과를 확인합니다. AP/BLE 후보가 나타나면 이후 정식 활성화 토큰·인증 및 실기기 통신 단계로 넘어갑니다.</li></ol>
+<div class="m330-bridge-actions"><button onclick="m3RefreshDiscovery()">M3 Max 검색 상태 새로고침</button></div>
+<pre id="m3-discovery-status" aria-live="polite">현장 기기 검색을 실행하기 전입니다.</pre>
+<p>등록 완료, 인증 성공, 원격 제어 사용 가능을 뜻하지 않습니다. Wi-Fi 암호와 Local Key는 Railway 서버에 업로드하지 않습니다.</p>
+</section></div>`;
 const BRIDGE_SCRIPT = `<script>
 async function m330BridgeRefresh(){
  const id=window.selectedRobotId;
@@ -65,6 +75,35 @@ async function m330BridgeRevoke(){
  }catch(e){alert(e.message)}
 }
 setInterval(m330BridgeRefresh,25000);
+
+async function m3RefreshDiscovery(){
+ const box=document.getElementById('m3-discovery-status');
+ const id=window.selectedRobotId;
+ if(!box||!id)return;
+ try{
+  const response=await fetch('/api/m3/onboarding/status?robot_id='+encodeURIComponent(id),{cache:'no-store'});
+  const data=await response.json();
+  if(!response.ok)throw Error(data.detail||'진단 상태 조회 실패');
+  const notes={
+   not_detected:'후보 없음 — Bluetooth/Wi-Fi 권한·네트워크 등록모드 확인',
+   lan_candidate:'Tuya LAN 후보 발견 — M3 Max 여부와 인증은 미검증',
+   ble_candidate:'Bluetooth 후보 발견 — M3 Max 여부와 인증은 미검증',
+   ap_candidate:'Wi-Fi AP 후보 발견 — M3 Max 여부와 인증은 미검증'
+  };
+  const o=data.observation;
+  box.textContent=o?(
+   '마지막 검색: '+o.last_seen+'\n'+(notes[o.phase]||o.phase)+
+   '\nBLE 후보: '+o.diagnostics.ble_candidates+
+   ' / Wi-Fi AP 후보: '+o.diagnostics.ap_candidates+
+   ' / Tuya LAN 후보: '+o.diagnostics.lan_candidates+
+   '\n진단: '+o.diagnostics.scan_state+
+   '\n실제 상태조회: '+(data.gateway_online?'성공 (기종 확인 별도)':'미검증')+
+   '\n실제 원격 제어: 비활성화'
+  ):'검색 기록 없음. 현장 PC에서 m3_onboard.py --scan --push를 실행하십시오.';
+ }catch(e){box.textContent='M3 Max 검색 상태 오류: '+e.message}
+}
+setInterval(m3RefreshDiscovery,15000);
+
 <\/script>`;
 const buildings=[
  {id:'myeonhak',name:'면학동',floors:[5,4,3,2,1].map(n=>({id:'myeonhak-'+n,label:n+'층',building_id:'myeonhak'}))},
@@ -84,6 +123,7 @@ db.exec("CREATE TABLE IF NOT EXISTS robots(id INTEGER PRIMARY KEY AUTOINCREMENT,
 db.exec("CREATE INDEX IF NOT EXISTS idx_robots_session ON robots(session_id,active,id)");
 db.exec("CREATE TABLE IF NOT EXISTS robot_pairs(robot_id INTEGER PRIMARY KEY,token_hash TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL)");
 db.exec("CREATE TABLE IF NOT EXISTS robot_observations(robot_id INTEGER PRIMARY KEY,last_seen TEXT NOT NULL,connected INTEGER NOT NULL,device_ref TEXT NOT NULL,protocol TEXT NOT NULL,raw_dps TEXT NOT NULL)");
+db.exec("CREATE TABLE IF NOT EXISTS robot_onboarding(robot_id INTEGER PRIMARY KEY,last_seen TEXT NOT NULL,phase TEXT NOT NULL,diagnostics TEXT NOT NULL)");
 function ensureColumn(table:string,column:string){
  const names=db.query('PRAGMA table_info('+table+')').all() as Array<{name:string}>;
  if(!names.some(x=>x.name===column)) db.exec('ALTER TABLE '+table+' ADD COLUMN '+column+' INTEGER');
@@ -154,7 +194,29 @@ Bun.serve({port:Number(Bun.env.PORT||3000),hostname:'0.0.0.0',async fetch(req){
  const cookie=fresh&&p!=='/api/gateway/observations'?{'Set-Cookie':'m330_session='+sid+'; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000'}:{};
  const json=(data:any,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store',...cookie}});
  const bad=(detail:string,status=400)=>json({detail},status);
- if(p==='/api/health'&&req.method==='GET')return json({ok:true,service:'m330-pro-mobile-web',version:'0.5.0',mode:'robot_motion_simulation',fleet:true,motion_engine:'astar_footprint_coverage_battery_charge',common_areas_only:true,stairs_included:true,stairs_robot_cleanable:false,gateway_bridge:'read_only',storage:'sqlite',at:new Date().toISOString()});
+ if(p==='/api/health'&&req.method==='GET')return json({ok:true,service:'m330-pro-mobile-web',version:'0.5.0',mode:'robot_motion_simulation',fleet:true,motion_engine:'astar_footprint_coverage_battery_charge',common_areas_only:true,stairs_included:true,stairs_robot_cleanable:false,gateway_bridge:'read_only',m3_onboarding:'discovery_only',storage:'sqlite',at:new Date().toISOString()});
+
+ // Discovery-only diagnostics for M3 Max. Gateway secret authenticates the on-site scanner,
+ // but neither a discovered device nor an onboarded observation authorises commands.
+ if(p==='/api/m3/onboarding/observe'&&req.method==='POST'){
+  const token=req.headers.get('X-M330-Pairing-Key')||'';
+  if(!/^[a-f0-9]{64}$/.test(token))return bad('유효하지 않은 현장 연결키',401);
+  const pair=db.query('SELECT p.robot_id FROM robot_pairs p JOIN robots r ON r.id=p.robot_id WHERE p.token_hash=? AND r.active=1').get(tokenHash(token)) as any;
+  if(!pair)return bad('현장 연결키 인증 실패',401);
+  let data:any;try{data=await readJson(req)}catch(e){return bad(messageError(e),400)}
+  const phases=['not_detected','ble_candidate','ap_candidate','lan_candidate'];
+  if(!data||data.schema_version!==1||!phases.includes(data.phase)||typeof data.diagnostics!=='object'||Array.isArray(data.diagnostics))
+   return bad('지원하지 않는 진단 형식',422);
+  const d=data.diagnostics;
+  const valid=(v:any)=>Number.isInteger(v)&&v>=0&&v<=100;
+  if(!valid(d.ble_candidates)||!valid(d.ap_candidates)||!valid(d.lan_candidates)||typeof d.scan_state!=='string'||!['complete','partial','unavailable'].includes(d.scan_state))
+   return bad('진단 값 형식 오류',422);
+  const clean={ble_candidates:d.ble_candidates,ap_candidates:d.ap_candidates,lan_candidates:d.lan_candidates,scan_state:d.scan_state};
+  db.query('INSERT INTO robot_onboarding(robot_id,last_seen,phase,diagnostics) VALUES(?,?,?,?) ON CONFLICT(robot_id) DO UPDATE SET last_seen=excluded.last_seen,phase=excluded.phase,diagnostics=excluded.diagnostics')
+   .run(pair.robot_id,new Date().toISOString(),data.phase,JSON.stringify(clean));
+  return json({ok:true,mode:'discovery_only',verified_hardware:false,commands_enabled:false});
+ }
+
  // Ingest observation with a per-robot secret, never an operator cookie.
  if(p==='/api/gateway/observations'&&req.method==='POST'){
   const token=req.headers.get('X-M330-Pairing-Key')||'';
@@ -220,6 +282,18 @@ Bun.serve({port:Number(Bun.env.PORT||3000),hostname:'0.0.0.0',async fetch(req){
   db.query('DELETE FROM robot_observations WHERE robot_id=?').run(r.id);
   return json({ok:true,archived:true,note:'이전 작업 기록은 보존됩니다.'});
  }
+
+ if(p==='/api/m3/onboarding/status'&&req.method==='GET'){
+  const robot=lookupRobot(sid,u.searchParams.get('robot_id'));
+  if(!robot)return bad('로봇을 찾을 수 없습니다.',404);
+  const entry=db.query('SELECT last_seen,phase,diagnostics FROM robot_onboarding WHERE robot_id=?').get(robot.id) as any;
+  return json({robot_id:robot.id,model:'M3 Max',observation:entry?{
+   last_seen:entry.last_seen,phase:entry.phase,diagnostics:JSON.parse(entry.diagnostics)
+  }:null,gateway_online:getGateway(robot.id).online,
+   pairing_completed:false,device_authenticated:false,commands_enabled:false,
+   blocker:'M3 Max의 실제 BLE/AP 활성화 경로 및 Tuya 클라우드 토큰 검증 필요'});
+ }
+
  if(p==='/api/gateway/status'&&req.method==='GET'){
   const r=lookupRobot(sid,u.searchParams.get('robot_id'));return r?json({robot_id:r.id,...getGateway(r.id)}):bad('로봇을 찾을 수 없습니다.',404);
  }
@@ -229,6 +303,7 @@ Bun.serve({port:Number(Bun.env.PORT||3000),hostname:'0.0.0.0',async fetch(req){
   const key=randomBytes(32).toString('hex');
   db.query('INSERT INTO robot_pairs(robot_id,token_hash,created_at) VALUES(?,?,?) ON CONFLICT(robot_id) DO UPDATE SET token_hash=excluded.token_hash,created_at=excluded.created_at').run(r.id,tokenHash(key),new Date().toISOString());
   db.query('DELETE FROM robot_observations WHERE robot_id=?').run(r.id);
+  db.query('DELETE FROM robot_onboarding WHERE robot_id=?').run(r.id);
   return json({ok:true,robot_id:r.id,pair_key:key,mode:'read_only',note:'연결키는 1회만 표시되며 해당 로봇에서만 사용할 수 있습니다.'});
  }
  if(p==='/api/gateway/revoke'&&req.method==='POST'){
@@ -236,6 +311,7 @@ Bun.serve({port:Number(Bun.env.PORT||3000),hostname:'0.0.0.0',async fetch(req){
   const r=lookupRobot(sid,d?.robot_id);if(!r)return bad('로봇을 찾을 수 없습니다.',404);
   db.query('DELETE FROM robot_pairs WHERE robot_id=?').run(r.id);
   db.query('DELETE FROM robot_observations WHERE robot_id=?').run(r.id);
+  db.query('DELETE FROM robot_onboarding WHERE robot_id=?').run(r.id);
   return json({ok:true,robot_id:r.id});
  }
  if(p==='/api/dashboard'&&req.method==='GET'){
