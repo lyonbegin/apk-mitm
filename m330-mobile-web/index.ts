@@ -36,7 +36,7 @@ const BRIDGE_PANEL = `
 <ol><li>M3 Max 전원을 켜고 설명서에 따른 약 6초 네트워크 등록모드로 진입합니다.</li>
 <li>같은 장소의 PC/Mac에서 <code>python3 m3_onboard.py --scan --push</code>를 실행합니다. 위의 「연결키 새로 발급」으로 발급한 키를 PC의 <code>M330_BRIDGE_KEY</code>에 설정해야 합니다.</li>
 <li>아래 검색 결과를 확인합니다. AP/BLE 후보가 나타나면 이후 정식 활성화 토큰·인증 및 실기기 통신 단계로 넘어갑니다.</li></ol>
-<div class="m330-bridge-actions"><button onclick="m3RefreshDiscovery()">M3 Max 검색 상태 새로고침</button></div>
+<div class="m330-bridge-actions"><button onclick="m3RefreshDiscovery()">M3 Max 검색 상태 새로고침</button><button onclick="m3BrowserBluetoothScan()">브라우저에서 Bluetooth 후보 찾기</button></div><p id="m3-browser-ble-local">브라우저 BLE 검색은 근거리 후보 선택 기능이며 M3 Max 등록이나 제어를 수행하지 않습니다.</p>
 <pre id="m3-discovery-status" aria-live="polite">현장 기기 검색을 실행하기 전입니다.</pre>
 <p>등록 완료, 인증 성공, 원격 제어 사용 가능을 뜻하지 않습니다. Wi-Fi 암호와 Local Key는 Railway 서버에 업로드하지 않습니다.</p>
 </section></div>`;
@@ -76,6 +76,22 @@ async function m330BridgeRevoke(){
 }
 setInterval(m330BridgeRefresh,25000);
 
+async function m3BrowserBluetoothScan(){
+ const out=document.getElementById('m3-browser-ble-local');
+ if(!out)return;
+ if(!navigator.bluetooth||!navigator.bluetooth.requestDevice){
+  out.textContent='이 브라우저에는 Web Bluetooth 기기 선택 기능이 없습니다. Android/PC의 호환 Chrome에서 HTTPS로 접속하거나 현장 프로그램을 이용하십시오.';
+  return;
+ }
+ try{
+  // Direct button click is required by browser. No Bluetooth pairing, GATT write or token acquisition.
+  const d=await navigator.bluetooth.requestDevice({acceptAllDevices:true});
+  const name=(d.name||'이름 없는 BLE 장치').slice(0,64);
+  out.textContent='브라우저에서 선택한 BLE 후보: '+name+' — 실기기 모델/소유권/인증 미검증. 비밀정보 전송 없음.';
+ }catch(e){
+  out.textContent=e&&e.name==='NotFoundError'?'Bluetooth 후보 선택을 취소하셨습니다.':'Bluetooth 검색 사용 불가: '+(e?.name||'기기 접근 오류');
+ }
+}
 async function m3RefreshDiscovery(){
  const box=document.getElementById('m3-discovery-status');
  const id=window.selectedRobotId;
