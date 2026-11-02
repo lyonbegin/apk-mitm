@@ -1,154 +1,244 @@
 #!/usr/bin/env python3
-"""Lefant M3 Max: official-app-free, read-only local discovery and cloud status relay.
+"""M3 Max Wi-Fi ONLY onsite agent.
 
-Scans Bluetooth advertisements, local Tuya discovery broadcasts, nearby Wi-Fi AP
-names. A candidate is NOT a paired, authenticated or identified robot. No device
-command, Wi-Fi credential submission, cloud activation or DP write takes place.
-Only counts and sanitized scanner availability are uploaded to Railway.
+1. Discover nearby robot Wi-Fi access points (AP) and Tuya LAN broadcasts.
+2. Optionally join a selected robot AP on the LOCAL computer with explicit --join-ap.
+3. Send sanitized Wi-Fi discovery counts to the existing Railway web gateway.
+
+Does not use Bluetooth or install Lefant. AP association is NOT robot activation.
+No SSID/password/device identifier/local key goes to Railway. Cloud activation
+token/brand account and exact Wi-Fi provisioning packet are not yet available.
 """
 from __future__ import annotations
 
 import argparse
-import asyncio
 import json
 import os
 import platform
 import re
 import subprocess
 import sys
+import time
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-DEFAULT_WEB = "https://m330-web-github-production.up.railway.app"
-CANDIDATE_NAME = re.compile(r"(lefant|m3[ _-]?max|tuya|smartlife|robot)", re.I)
+WEB = "https://m330-web-github-production.up.railway.app"
+ROBOT_AP = re.compile(r"(?:lefant|tuya|smartlife|smart.?life|robot|m3[ _-]?max)", re.I)
+AIRPORT = "/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport"
 
 
-def wifi_candidates():
-    """Nearby AP candidates only; do not collect home SSIDs or Wi-Fi secrets."""
+def run(args, timeout=14):
+    return subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                          text=True, timeout=timeout, check=False)
+
+
+def mac_wifi_device():
+    try:
+        text = run(["networksetup", "-listallhardwareports"]).stdout
+        blocks = text.split("\n\n")
+        for block in blocks:
+            if re.search(r"Hardware Port: (?:Wi-Fi|AirPort)", block, re.I):
+                match = re.search(r"Device: ([a-zA-Z0-9]+)", block)
+                if match:
+                    return match.group(1)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    return None
+
+
+def active_wifi():
+    """Return current local SSID, which is never included in uploaded data."""
+    try:
+        system = platform.system()
+        if system == "Darwin":
+            device = mac_wifi_device()
+            if not device:
+                return None
+            out = run(["networksetup", "-getairportnetwork", device]).stdout
+            m = re.search(r"Current Wi-Fi Network:\s*(.+)", out)
+            return m.group(1).strip() if m else None
+        if system == "Linux":
+            out = run(["nmcli", "-t", "-f", "ACTIVE,SSID", "dev", "wifi"]).stdout
+            for line in out.splitlines():
+                if line.startswith("yes:"):
+                    return line.split(":", 1)[1].strip() or None
+        if system == "Windows":
+            out = run(["netsh", "wlan", "show", "interfaces"]).stdout
+            m = re.search(r"(?m)^\s*SSID\s*:\s*(.+)$", out)
+            return m.group(1).strip() if m else None
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    return None
+
+
+def wifi_access_points():
+    """Nearby robot-like AP SSIDs returned only to the local console."""
     system = platform.system()
-    commands = []
-    if system == "Linux":
-        commands.append(["nmcli", "-t", "-f", "SSID", "dev", "wifi", "list", "--rescan", "yes"])
-    elif system == "Darwin":
-        commands.extend([
-            ["/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport", "-s"],
-        ])
-    for cmd in commands:
-        try:
-            run = subprocess.run(cmd, timeout=12, stdout=subprocess.PIPE,
-                                 stderr=subprocess.DEVNULL, text=True, check=False)
-            if run.returncode == 0:
-                rows = [line.strip() for line in run.stdout.splitlines()]
-                return min(100, sum(1 for line in rows if CANDIDATE_NAME.search(line))), "complete"
-        except (OSError, subprocess.TimeoutExpired):
-            pass
-    return 0, "unavailable"
+    try:
+        if system == "Linux":
+            out = run(["nmcli", "-t", "-f", "SSID", "dev", "wifi", "list", "--rescan", "yes"])
+            if out.returncode != 0:
+                return [], "unavailable"
+            names = [x.replace(r"\:", ":").strip() for x in out.stdout.splitlines()]
+        elif system == "Darwin":
+            # airport -s is deprecated on some macOS versions; report unavailable
+            # rather than claim there are zero nearby APs.
+            out = run([AIRPORT, "-s"])
+            if out.returncode != 0:
+                return [], "unavailable"
+            names = [re.split(r"\s{2,}", x.strip())[0] for x in out.stdout.splitlines()[1:] if x.strip()]
+        elif system == "Windows":
+            out = run(["netsh", "wlan", "show", "networks", "mode=bssid"])
+            if out.returncode != 0:
+                return [], "unavailable"
+            names = re.findall(r"(?m)^\s*SSID\s+\d+\s*:\s*(.+)$", out.stdout)
+        else:
+            return [], "unavailable"
+        return sorted(set(name for name in names if name and ROBOT_AP.search(name)))[:100], "complete"
+    except (OSError, subprocess.TimeoutExpired):
+        return [], "unavailable"
 
 
-def lan_candidates():
-    """Tuya UDP broadcast discovery (no key required); all devices are unverified."""
+def lan_discovery():
+    """Passive Tuya UDP LAN discovery; no device read/write or secret extraction."""
     try:
         import tinytuya
     except ImportError:
         return 0, "unavailable"
     try:
-        # No device ID, IP, MAC or local key is transferred to the web service.
-        devices = tinytuya.deviceScan(verbose=False, max_retries=2)
-        return min(100, len(devices) if isinstance(devices, dict) else 0), "complete"
+        result = tinytuya.deviceScan(verbose=False, max_retries=2)
+        return min(100, len(result) if isinstance(result, dict) else 0), "complete"
     except Exception:
         return 0, "unavailable"
 
 
-async def ble_candidates(seconds=8):
-    """Read-only BLE advertisements; no BLE connect, pairing, GATT writes or keys."""
-    try:
-        from bleak import BleakScanner
-    except ImportError:
-        return 0, "unavailable"
-    try:
-        items = await BleakScanner.discover(timeout=seconds, return_adv=True)
-        names = []
-        if isinstance(items, dict):
-            for _, value in items.items():
-                if not isinstance(value, tuple) or len(value) != 2:
-                    continue
-                device, advert = value
-                names.append(str(getattr(advert, "local_name", None) or getattr(device, "name", "") or ""))
-        return min(100, sum(1 for n in names if CANDIDATE_NAME.search(n))), "complete"
-    except Exception:
-        return 0, "unavailable"
-
-
-def scan():
-    ap, a = wifi_candidates()
-    lan, b = lan_candidates()
-    ble, c = asyncio.run(ble_candidates())
-    if ble:
-        phase = "ble_candidate"
-    elif ap:
-        phase = "ap_candidate"
-    elif lan:
-        phase = "lan_candidate"
+def wifi_report():
+    aps, wifi_status = wifi_access_points()
+    lan_count, lan_status = lan_discovery()
+    ssid = active_wifi()
+    joined = bool(ssid and ROBOT_AP.search(ssid))
+    if joined:
+        phase = "wifi_ap_connected"
+    elif aps:
+        phase = "wifi_ap_found"
+    elif lan_count:
+        phase = "wifi_lan_detected"
     else:
         phase = "not_detected"
-    phases = (a, b, c)
-    scan_state = "complete" if all(x == "complete" for x in phases) else (
-        "partial" if any(x == "complete" for x in phases) else "unavailable"
-    )
-    return {"schema_version": 1, "phase": phase, "diagnostics": {
-        "ble_candidates": ble, "ap_candidates": ap, "lan_candidates": lan,
-        "scan_state": scan_state
+    statuses = [wifi_status, lan_status]
+    summary = ("complete" if all(x == "complete" for x in statuses)
+               else "partial" if any(x == "complete" for x in statuses) else "unavailable")
+    result = {"schema_version": 2, "phase": phase, "diagnostics": {
+        "ap_candidates": len(aps), "lan_candidates": lan_count,
+        "scan_state": summary, "wifi_ap_joined": joined,
     }}
+    return result, aps
 
 
-def push(server, token, payload):
-    parsed = urlparse(server)
-    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
-        raise ValueError("HTTPS Railway 웹 주소만 허용합니다.")
-    if not re.fullmatch(r"[0-9a-f]{64}", token):
-        raise ValueError("64자리 현장 연결키를 지정하십시오.")
+def join_ap(ssid, password=None):
+    """Explicitly associate LOCAL host with the user-chosen Wi-Fi AP.
+
+    Never transmits home router credentials to a robot. OS confirms association;
+    any M3 Max Tuya cloud activation is a separate, currently unimplemented step.
+    """
+    if not isinstance(ssid, str) or not (1 <= len(ssid) <= 32) or "\x00" in ssid:
+        raise ValueError("Wi-Fi AP 이름이 유효하지 않습니다.")
+    system = platform.system()
+    if system == "Darwin":
+        dev = mac_wifi_device()
+        if not dev:
+            raise RuntimeError("Mac Wi-Fi 장치를 확인하지 못했습니다.")
+        cmd = ["networksetup", "-setairportnetwork", dev, ssid]
+        if password:
+            cmd.append(password)  # local process only; may be visible in OS process list
+    elif system == "Linux":
+        # The password, if needed, should be configured in an OS credential store,
+        # not included in command arguments, logs, browser or cloud requests.
+        if password:
+            raise RuntimeError("암호가 필요한 AP는 OS Wi-Fi 설정에서 직접 연결하십시오.")
+        cmd = ["nmcli", "dev", "wifi", "connect", ssid]
+    else:
+        raise RuntimeError("이 운영체제에서는 OS Wi-Fi 설정에서 AP에 직접 연결하십시오.")
+    # Do not include secrets or full command in errors or logs.
+    try:
+        out = run(cmd, timeout=25)
+    except (OSError, subprocess.TimeoutExpired):
+        raise RuntimeError("Wi-Fi AP 연결 명령을 실행하지 못했습니다.") from None
+    if out.returncode != 0:
+        raise RuntimeError("Wi-Fi AP 연결 실패: AP 신호 및 운영체제 Wi-Fi 설정을 확인하십시오.")
+    for _ in range(5):
+        if active_wifi() == ssid:
+            return True
+        time.sleep(1)
+    raise RuntimeError("Wi-Fi 연결 명령은 실행됐지만 현재 AP 연결은 확인되지 않았습니다.")
+
+
+def push(server, secret, payload):
+    u = urlparse(server)
+    if u.scheme != "https" or not u.hostname or u.username or u.password:
+        raise ValueError("HTTPS 웹 주소만 허용합니다.")
+    if not re.fullmatch(r"[a-f0-9]{64}", secret):
+        raise ValueError("웹에서 발급한 현장 연결키를 입력하십시오.")
+    # Deliberate allowlist: no SSID, password, LAN IP, MAC or Device ID.
+    safe = {"schema_version": 2, "phase": payload["phase"],
+            "diagnostics": {k: payload["diagnostics"][k] for k in (
+                "ap_candidates", "lan_candidates", "scan_state", "wifi_ap_joined")}}
     request = Request(
         server.rstrip("/") + "/api/m3/onboarding/observe",
-        method="POST",
-        data=json.dumps(payload, separators=(",", ":")).encode(),
-        headers={"Content-Type": "application/json", "X-M330-Pairing-Key": token},
-    )
+        data=json.dumps(safe, ensure_ascii=False).encode(), method="POST",
+        headers={"Content-Type": "application/json", "X-M330-Pairing-Key": secret})
     with urlopen(request, timeout=12) as response:
         return response.status == 200
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="M3 Max BLE/AP/Tuya LAN 후보 검색 — 공식 앱 설치 불필요")
-    parser.add_argument("--scan", action="store_true", help="현장 기기 후보 검색")
-    parser.add_argument("--push", action="store_true", help="Railway 웹으로 비식별 검색결과 전송")
-    parser.add_argument("--server", default=DEFAULT_WEB)
-    parser.add_argument("--simulate", action="store_true", help="실기기에 접근하지 않고 데이터 형식 시험")
-    args = parser.parse_args(argv)
-    if not args.scan and not args.simulate:
-        parser.error("--scan 또는 --simulate 옵션이 필요합니다.")
-    if args.simulate:
-        payload = {"schema_version": 1, "phase": "not_detected", "diagnostics": {
-            "ble_candidates": 0, "ap_candidates": 0, "lan_candidates": 0,
-            "scan_state": "unavailable"
-        }}
-    else:
-        payload = scan()
-    # Never print SSID, network password, Bluetooth MAC, device ID, local key or bridge key.
-    print(json.dumps({**payload, "verified_hardware": False, "command_writes": False},
-                     ensure_ascii=False), flush=True)
-    if args.push and not args.simulate:
+    p = argparse.ArgumentParser(description="Lefant M3 Max Wi-Fi 전용 로컬 연결 도우미 (Bluetooth 미사용)")
+    p.add_argument("--scan", action="store_true", help="근처 로봇 Wi-Fi AP 및 공유기 LAN 기기 검색")
+    p.add_argument("--join-ap", metavar="SSID", help="명시한 로봇 Wi-Fi AP에 이 PC/Mac을 연결 (사용자 지시 후)")
+    p.add_argument("--push", action="store_true", help="비식별 Wi-Fi 상태를 Railway 웹에 전송")
+    p.add_argument("--watch", type=int, default=0, help="지속 검색 간격(초; 최소 15초)")
+    p.add_argument("--simulate", action="store_true", help="실제 기기·Wi-Fi에 접근하지 않고 형식 시험")
+    p.add_argument("--server", default=WEB)
+    a = p.parse_args(argv)
+    if not (a.scan or a.join_ap or a.simulate):
+        p.error("--scan 또는 --join-ap 또는 --simulate를 지정하십시오.")
+    if a.simulate:
+        sample = {"schema_version": 2, "phase": "not_detected",
+                  "diagnostics": {"ap_candidates": 0, "lan_candidates": 0,
+                                  "scan_state": "unavailable", "wifi_ap_joined": False}}
+        print(json.dumps({**sample, "verified_hardware": False, "commands_enabled": False},
+                         ensure_ascii=False))
+        return 0
+    if a.join_ap:
         try:
-            token = os.environ.get("M330_BRIDGE_KEY", "")
-            accepted = push(args.server, token, payload)
-            print(json.dumps({"railway_discovery_report_accepted": accepted},
-                             ensure_ascii=False), flush=True)
-            return 0 if accepted else 1
-        except Exception as exc:
-            print(json.dumps({"railway_discovery_report_accepted": False,
-                              "error_type": type(exc).__name__}, ensure_ascii=False),
-                  file=sys.stderr)
+            # Wi-Fi only: user chooses AP. No BLE and NO remote robot credentials.
+            join_ap(a.join_ap)
+            print(json.dumps({"wifi_association": "confirmed", "device_auth": "not_verified",
+                              "actual_robot_control": False}, ensure_ascii=False))
+        except Exception as e:
+            print(json.dumps({"wifi_association": "failed",
+                              "reason": str(e)}, ensure_ascii=False), file=sys.stderr)
             return 1
-    return 0
+    while True:
+        data, names = wifi_report()
+        print(json.dumps({**data, "local_wifi_ap_names": names,
+                          "device_authenticated": False, "commands_enabled": False},
+                         ensure_ascii=False), flush=True)
+        if a.push:
+            try:
+                sent = push(a.server, os.environ.get("M330_BRIDGE_KEY", ""), data)
+                print(json.dumps({"railway_report_accepted": sent}), flush=True)
+            except Exception as e:
+                # The Wi-Fi connection can lose internet when joining robot AP.
+                print(json.dumps({"railway_report_accepted": False,
+                                  "error_type": type(e).__name__,
+                                  "hint": "로봇 AP 연결 중 인터넷이 끊겼다면 원래 Wi-Fi로 복귀해 다시 전송하십시오."},
+                                 ensure_ascii=False), file=sys.stderr)
+                if not a.watch:
+                    return 1
+        if not a.watch:
+            return 0
+        time.sleep(max(15, a.watch))
 
 
 if __name__ == "__main__":
