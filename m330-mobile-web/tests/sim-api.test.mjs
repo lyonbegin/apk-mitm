@@ -62,3 +62,43 @@ assert.equal(secondState.robots.length,1);
 assert.equal(secondState.robots[0].robot_id,second.robot.id);
 assert.equal(secondState.robots[0].cleaned_cells,0);
 console.log('PASS motion API: footprint, 11 virtual sensors, 28cm path, real cell coverage, pause/resume, obstacle, no-go, docking, charge-resume, robot isolation');
+
+
+// M3 Max physical discovery onboarding: protected report, no robot commands or false pairing.
+const pair=await call('/api/gateway/pair',{robot_id:first});
+assert.match(pair.pair_key,/^[a-f0-9]{64}$/);
+const emptyStatus=await call('/api/m3/onboarding/status?robot_id='+first);
+assert.equal(emptyStatus.observation,null);
+assert.equal(emptyStatus.pairing_completed,false);
+assert.equal(emptyStatus.commands_enabled,false);
+const sample={schema_version:1,phase:'ble_candidate',diagnostics:{
+ ble_candidates:1,ap_candidates:0,lan_candidates:0,scan_state:'partial'}};
+const withoutSecret=await fetch(BASE+'/api/m3/onboarding/observe',{method:'POST',
+ headers:{'Content-Type':'application/json'},body:JSON.stringify(sample)});
+assert.equal(withoutSecret.status,401,'discovery upload requires bridge authentication');
+const withSecret=await fetch(BASE+'/api/m3/onboarding/observe',{method:'POST',
+ headers:{'Content-Type':'application/json','X-M330-Pairing-Key':pair.pair_key},
+ body:JSON.stringify(sample)});
+assert.equal(withSecret.status,200);
+const accepted=await withSecret.json();
+assert.equal(accepted.verified_hardware,false);
+assert.equal(accepted.commands_enabled,false);
+const reported=await call('/api/m3/onboarding/status?robot_id='+first);
+assert.equal(reported.observation.phase,'ble_candidate');
+assert.equal(reported.observation.diagnostics.ble_candidates,1);
+assert.equal(reported.commands_enabled,false);
+const unknownSensitive=await fetch(BASE+'/api/m3/onboarding/observe',{method:'POST',
+ headers:{'Content-Type':'application/json','X-M330-Pairing-Key':pair.pair_key},
+ body:JSON.stringify({...sample,diagnostics:{...sample.diagnostics,ssid:'secret-wifi',local_key:'secret-key'}})});
+assert.equal(unknownSensitive.status,200,'extra fields must be discarded by whitelist');
+const noSecrets=await call('/api/m3/onboarding/status?robot_id='+first);
+assert.equal(JSON.stringify(noSecrets).includes('secret-wifi'),false);
+assert.equal(JSON.stringify(noSecrets).includes('secret-key'),false);
+const malformed=await fetch(BASE+'/api/m3/onboarding/observe',{method:'POST',
+ headers:{'Content-Type':'application/json','X-M330-Pairing-Key':pair.pair_key},
+ body:JSON.stringify({...sample,phase:'paired_and_controllable'})});
+assert.equal(malformed.status,422);
+await call('/api/gateway/revoke',{robot_id:first});
+const afterRevoke=await call('/api/m3/onboarding/status?robot_id='+first);
+assert.equal(afterRevoke.observation,null);
+console.log('PASS M3 Max onboarding: token authorization, BLE/AP/LAN-only diagnostics, no secrets, no false pairing, revoke');
