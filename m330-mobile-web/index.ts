@@ -92,13 +92,13 @@ async function m3RefreshDiscovery(){
   };
   const o=data.observation;
   box.textContent=o?(
-   '마지막 검색: '+o.last_seen+'\n'+(notes[o.phase]||o.phase)+
-   '\nBLE 후보: '+o.diagnostics.ble_candidates+
+   '마지막 검색: '+o.last_seen+'\\n'+(notes[o.phase]||o.phase)+
+   '\\nBLE 후보: '+o.diagnostics.ble_candidates+
    ' / Wi-Fi AP 후보: '+o.diagnostics.ap_candidates+
    ' / Tuya LAN 후보: '+o.diagnostics.lan_candidates+
-   '\n진단: '+o.diagnostics.scan_state+
-   '\n실제 상태조회: '+(data.gateway_online?'성공 (기종 확인 별도)':'미검증')+
-   '\n실제 원격 제어: 비활성화'
+   '\\n진단: '+o.diagnostics.scan_state+
+   '\\n실제 상태조회: '+(data.gateway_online?'성공 (기종 확인 별도)':'미검증')+
+   '\\n실제 원격 제어: 비활성화'
   ):'검색 기록 없음. 현장 PC에서 m3_onboard.py --scan --push를 실행하십시오.';
  }catch(e){box.textContent='M3 Max 검색 상태 오류: '+e.message}
 }
