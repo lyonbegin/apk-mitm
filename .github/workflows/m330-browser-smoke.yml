@@ -48,7 +48,7 @@ jobs:
             sleep 1
           done
           grep -q 'M3 Max Wi-Fi 연결' /tmp/m3-wifi-page.html
-          grep -q 'Wi-Fi AP 접속' /tmp/m3-wifi-page.html
+          grep -q '로봇 AP 접속' /tmp/m3-wifi-page.html
           http_code=$(curl --silent --output /tmp/m3-wifi-denied.json --write-out '%{http_code}' \
             -X POST http://127.0.0.1:8765/api/join \
             -H 'Content-Type: application/json' --data '{"ssid":"SmartLife"}')
