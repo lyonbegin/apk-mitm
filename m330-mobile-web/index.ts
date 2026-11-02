@@ -30,15 +30,19 @@ const BRIDGE_PANEL = `
 <pre id="m330-bridge-observation">실제 장치 관측 정보 없음</pre>
 <p>현장 도구: <code>gateway/m330_lan_probe.py</code> · <code>gateway/m330_bridge.py</code>. 웹에서 로봇이 자동 발견되는 방식은 아닙니다.</p>
 
-<section style="margin-top:14px;padding:12px;border:1px solid #aaa;border-radius:8px" aria-label="M3 Max 실제 기기 등록 진단">
-<h3>M3 Max 실기기 발견 · 공식 앱 없이 준비</h3>
-<p><b>현재 구현: BLE 후보 검색, 로컬 Wi-Fi/AP 후보 검색, Tuya LAN 후보 검색 결과를 현장 PC에서 받아 표시합니다.</b> 발견만으로 등록이나 제어가 완료되지는 않습니다.</p>
-<ol><li>M3 Max 전원을 켜고 설명서에 따른 약 6초 네트워크 등록모드로 진입합니다.</li>
-<li>같은 장소의 PC/Mac에서 <code>python3 m3_onboard.py --scan --push</code>를 실행합니다. 위의 「연결키 새로 발급」으로 발급한 키를 PC의 <code>M330_BRIDGE_KEY</code>에 설정해야 합니다.</li>
-<li>아래 검색 결과를 확인합니다. AP/BLE 후보가 나타나면 이후 정식 활성화 토큰·인증 및 실기기 통신 단계로 넘어갑니다.</li></ol>
-<div class="m330-bridge-actions"><button onclick="m3RefreshDiscovery()">M3 Max 검색 상태 새로고침</button><button onclick="m3BrowserBluetoothScan()">브라우저에서 Bluetooth 후보 찾기</button></div><p id="m3-browser-ble-local">브라우저 BLE 검색은 근거리 후보 선택 기능이며 M3 Max 등록이나 제어를 수행하지 않습니다.</p>
-<pre id="m3-discovery-status" aria-live="polite">현장 기기 검색을 실행하기 전입니다.</pre>
-<p>등록 완료, 인증 성공, 원격 제어 사용 가능을 뜻하지 않습니다. Wi-Fi 암호와 Local Key는 Railway 서버에 업로드하지 않습니다.</p>
+<section style="margin-top:14px;padding:12px;border:1px solid #aaa;border-radius:8px" aria-label="M3 Max Wi-Fi 연결">
+<h3>M3 Max Wi-Fi 연결</h3>
+<p><b>Bluetooth를 사용하지 않습니다.</b> Wi-Fi 공유기 연결(LAN)과 로봇이 직접 제공하는 Wi-Fi AP 연결을 구분하여 확인합니다. 공식 Lefant 앱을 설치하지 않아도 진단할 수 있습니다.</p>
+<ol>
+<li>로봇이 이미 공유기에 연결되어 있다면 로봇과 같은 Wi-Fi에 연결된 현장 PC/Mac에서 검색하십시오.</li>
+<li>최초 연결이라면 M3 Max를 네트워크 등록 모드로 설정한 다음 로봇이 제공하는 Wi-Fi AP를 검색하십시오.</li>
+<li>현장 PC/Mac에서 <code>python3 -m pip install tinytuya</code> 후 <code>python3 m3_onboard.py --scan --push</code>를 실행하십시오. 위의 <b>연결키 새로 발급</b> 키는 PC의 <code>M330_BRIDGE_KEY</code>로 입력합니다.</li>
+<li>로봇 AP가 발견되면 PC/Mac에서 <code>python3 m3_onboard.py --join-ap '실제로 검색된 AP 이름' --scan</code>을 실행하여 해당 Wi-Fi에 접속할 수 있습니다.</li>
+</ol>
+<p>로봇 AP에 접속하는 것과 로봇이 가정/학교 공유기에 등록되는 것은 다릅니다. 실제 최초 등록에는 펌웨어에 맞는 Wi-Fi 설정 프로토콜과 인증 토큰이 필요하므로 현재는 <b>Wi-Fi 검색·AP 접속·LAN 확인 단계</b>까지만 지원합니다.</p>
+<div class="m330-bridge-actions"><button onclick="m3RefreshDiscovery()">Wi-Fi 연결 상태 새로고침</button></div>
+<pre id="m3-discovery-status" aria-live="polite">현장 Wi-Fi 검색 기록이 없습니다.</pre>
+<p>일반 HTTPS 웹페이지는 주변 Wi-Fi 목록을 직접 검색하거나 공유기/AP를 자동 전환할 수 없으므로 동일 네트워크 현장 프로그램에서 수행합니다. Wi-Fi 암호·기기 ID·Local Key는 Railway에 올리지 않습니다. 로봇 AP에 접속하면 인터넷이 잠시 끊겨 웹 보고가 중단될 수 있습니다.</p>
 </section></div>`;
 const BRIDGE_SCRIPT = `<script>
 async function m330BridgeRefresh(){
@@ -76,47 +80,32 @@ async function m330BridgeRevoke(){
 }
 setInterval(m330BridgeRefresh,25000);
 
-async function m3BrowserBluetoothScan(){
- const out=document.getElementById('m3-browser-ble-local');
- if(!out)return;
- if(!navigator.bluetooth||!navigator.bluetooth.requestDevice){
-  out.textContent='이 브라우저에는 Web Bluetooth 기기 선택 기능이 없습니다. Android/PC의 호환 Chrome에서 HTTPS로 접속하거나 현장 프로그램을 이용하십시오.';
-  return;
- }
- try{
-  // Direct button click is required by browser. No Bluetooth pairing, GATT write or token acquisition.
-  const d=await navigator.bluetooth.requestDevice({acceptAllDevices:true});
-  const name=(d.name||'이름 없는 BLE 장치').slice(0,64);
-  out.textContent='브라우저에서 선택한 BLE 후보: '+name+' — 실기기 모델/소유권/인증 미검증. 비밀정보 전송 없음.';
- }catch(e){
-  out.textContent=e&&e.name==='NotFoundError'?'Bluetooth 후보 선택을 취소하셨습니다.':'Bluetooth 검색 사용 불가: '+(e?.name||'기기 접근 오류');
- }
-}
 async function m3RefreshDiscovery(){
  const box=document.getElementById('m3-discovery-status');
  const id=window.selectedRobotId;
  if(!box||!id)return;
  try{
-  const response=await fetch('/api/m3/onboarding/status?robot_id='+encodeURIComponent(id),{cache:'no-store'});
-  const data=await response.json();
-  if(!response.ok)throw Error(data.detail||'진단 상태 조회 실패');
-  const notes={
-   not_detected:'후보 없음 — Bluetooth/Wi-Fi 권한·네트워크 등록모드 확인',
-   lan_candidate:'Tuya LAN 후보 발견 — M3 Max 여부와 인증은 미검증',
-   ble_candidate:'Bluetooth 후보 발견 — M3 Max 여부와 인증은 미검증',
-   ap_candidate:'Wi-Fi AP 후보 발견 — M3 Max 여부와 인증은 미검증'
+  const r=await fetch('/api/m3/onboarding/status?robot_id='+encodeURIComponent(id),{cache:'no-store'});
+  const data=await r.json();
+  if(!r.ok)throw Error(data.detail||'Wi-Fi 조회 실패');
+  const names={
+   not_detected:'Wi-Fi 로봇 후보 없음 또는 검색 제한',
+   wifi_ap_found:'로봇 Wi-Fi AP 후보 검색됨 (접속 전)',
+   wifi_ap_connected:'현장 PC가 로봇 계열 Wi-Fi AP에 연결된 것으로 관측됨 (로봇 인증 전)',
+   wifi_lan_detected:'같은 공유기의 Tuya LAN 후보 검색됨 (M3 Max 식별 전)'
   };
   const o=data.observation;
   box.textContent=o?(
-   '마지막 검색: '+o.last_seen+'\\n'+(notes[o.phase]||o.phase)+
-   '\\nBLE 후보: '+o.diagnostics.ble_candidates+
-   ' / Wi-Fi AP 후보: '+o.diagnostics.ap_candidates+
+   '최근 검색: '+o.last_seen+'\\n'+(names[o.phase]||o.phase)+
+   '\\n로봇 Wi-Fi AP 후보: '+o.diagnostics.ap_candidates+
    ' / Tuya LAN 후보: '+o.diagnostics.lan_candidates+
-   '\\n진단: '+o.diagnostics.scan_state+
-   '\\n실제 상태조회: '+(data.gateway_online?'성공 (기종 확인 별도)':'미검증')+
-   '\\n실제 원격 제어: 비활성화'
-  ):'검색 기록 없음. 현장 PC에서 m3_onboard.py --scan --push를 실행하십시오.';
- }catch(e){box.textContent='M3 Max 검색 상태 오류: '+e.message}
+   '\\n현장 PC의 후보 AP 연결: '+(o.diagnostics.wifi_ap_joined?'확인':'미확인')+
+   '\\n검색 상태: '+o.diagnostics.scan_state+
+   '\\n실기기 상태 응답: '+(data.gateway_online?'수신 (기종 별도 검증)':'미수신')+
+   '\\nWi-Fi 공유기 최초 등록 / 로봇 인증: 미검증'+
+   '\\n실제 로봇 제어: 비활성화'
+  ):'연결 진단 기록 없음. 현장 PC에서 m3_onboard.py --scan --push를 실행하십시오.';
+ }catch(e){box.textContent='Wi-Fi 진단 조회 실패: '+e.message}
 }
 setInterval(m3RefreshDiscovery,15000);
 
@@ -211,7 +200,7 @@ Bun.serve({port:Number(Bun.env.PORT||3000),hostname:'0.0.0.0',async fetch(req){
  const cookie=fresh&&p!=='/api/gateway/observations'?{'Set-Cookie':'m330_session='+sid+'; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000'}:{};
  const json=(data:any,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store',...cookie}});
  const bad=(detail:string,status=400)=>json({detail},status);
- if(p==='/api/health'&&req.method==='GET')return json({ok:true,service:'m330-pro-mobile-web',version:'0.5.0',mode:'robot_motion_simulation',fleet:true,motion_engine:'astar_footprint_coverage_battery_charge',common_areas_only:true,stairs_included:true,stairs_robot_cleanable:false,gateway_bridge:'read_only',m3_onboarding:'discovery_only',storage:'sqlite',at:new Date().toISOString()});
+ if(p==='/api/health'&&req.method==='GET')return json({ok:true,service:'m330-pro-mobile-web',version:'0.5.0',mode:'robot_motion_simulation',fleet:true,motion_engine:'astar_footprint_coverage_battery_charge',common_areas_only:true,stairs_included:true,stairs_robot_cleanable:false,gateway_bridge:'read_only',m3_onboarding:'wifi_only_discovery',storage:'sqlite',at:new Date().toISOString()});
 
  // Discovery-only diagnostics for M3 Max. Gateway secret authenticates the on-site scanner,
  // but neither a discovered device nor an onboarded observation authorises commands.
@@ -221,17 +210,23 @@ Bun.serve({port:Number(Bun.env.PORT||3000),hostname:'0.0.0.0',async fetch(req){
   const pair=db.query('SELECT p.robot_id FROM robot_pairs p JOIN robots r ON r.id=p.robot_id WHERE p.token_hash=? AND r.active=1').get(tokenHash(token)) as any;
   if(!pair)return bad('현장 연결키 인증 실패',401);
   let data:any;try{data=await readJson(req)}catch(e){return bad(messageError(e),400)}
-  const phases=['not_detected','ble_candidate','ap_candidate','lan_candidate'];
-  if(!data||data.schema_version!==1||!phases.includes(data.phase)||typeof data.diagnostics!=='object'||Array.isArray(data.diagnostics))
-   return bad('지원하지 않는 진단 형식',422);
+  const phases=['not_detected','wifi_ap_found','wifi_ap_connected','wifi_lan_detected'];
+  if(!data||data.schema_version!==2||!phases.includes(data.phase)||typeof data.diagnostics!=='object'||Array.isArray(data.diagnostics))
+   return bad('지원하지 않는 Wi-Fi 진단 형식',422);
   const d=data.diagnostics;
   const valid=(v:any)=>Number.isInteger(v)&&v>=0&&v<=100;
-  if(!valid(d.ble_candidates)||!valid(d.ap_candidates)||!valid(d.lan_candidates)||typeof d.scan_state!=='string'||!['complete','partial','unavailable'].includes(d.scan_state))
-   return bad('진단 값 형식 오류',422);
-  const clean={ble_candidates:d.ble_candidates,ap_candidates:d.ap_candidates,lan_candidates:d.lan_candidates,scan_state:d.scan_state};
+  if(!valid(d.ap_candidates)||!valid(d.lan_candidates)||typeof d.wifi_ap_joined!=='boolean'||typeof d.scan_state!=='string'||!['complete','partial','unavailable'].includes(d.scan_state))
+   return bad('Wi-Fi 진단 값 형식 오류',422);
+  if((data.phase==='wifi_ap_connected')!==d.wifi_ap_joined ||
+   (data.phase==='wifi_ap_found'&&d.ap_candidates===0) ||
+   (data.phase==='wifi_lan_detected'&&d.lan_candidates===0) ||
+   (data.phase==='not_detected'&&(d.ap_candidates!==0||d.lan_candidates!==0)))
+   return bad('검색 상태와 관측값이 일치하지 않습니다.',422);
+  const clean={ap_candidates:d.ap_candidates,lan_candidates:d.lan_candidates,
+               wifi_ap_joined:d.wifi_ap_joined,scan_state:d.scan_state};
   db.query('INSERT INTO robot_onboarding(robot_id,last_seen,phase,diagnostics) VALUES(?,?,?,?) ON CONFLICT(robot_id) DO UPDATE SET last_seen=excluded.last_seen,phase=excluded.phase,diagnostics=excluded.diagnostics')
    .run(pair.robot_id,new Date().toISOString(),data.phase,JSON.stringify(clean));
-  return json({ok:true,mode:'discovery_only',verified_hardware:false,commands_enabled:false});
+  return json({ok:true,mode:'wifi_only_discovery',verified_hardware:false,commands_enabled:false});
  }
 
  // Ingest observation with a per-robot secret, never an operator cookie.
@@ -308,11 +303,11 @@ Bun.serve({port:Number(Bun.env.PORT||3000),hostname:'0.0.0.0',async fetch(req){
   const robot=lookupRobot(sid,u.searchParams.get('robot_id'));
   if(!robot)return bad('로봇을 찾을 수 없습니다.',404);
   const entry=db.query('SELECT last_seen,phase,diagnostics FROM robot_onboarding WHERE robot_id=?').get(robot.id) as any;
-  return json({robot_id:robot.id,model:'M3 Max',observation:entry?{
+  return json({robot_id:robot.id,model:robot.model||'M330 Pro',connection_transport:'wifi_only',observation:entry?{
    last_seen:entry.last_seen,phase:entry.phase,diagnostics:JSON.parse(entry.diagnostics)
   }:null,gateway_online:getGateway(robot.id).online,
    pairing_completed:false,device_authenticated:false,commands_enabled:false,
-   blocker:'M3 Max의 실제 BLE/AP 활성화 경로 및 Tuya 클라우드 토큰 검증 필요'});
+   blocker:'M3 Max의 Wi-Fi AP 초기 활성화 페이로드 및 해당 제조사 Tuya 클라우드 토큰 실기기 검증 필요'});
  }
 
  if(p==='/api/gateway/status'&&req.method==='GET'){
