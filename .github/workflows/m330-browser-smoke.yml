@@ -32,10 +32,11 @@ jobs:
         run: |
           npm install --no-audit --no-fund
           npx playwright install --with-deps chromium
-      - name: Verify M3 Max discovery agent without physical device
+      - name: Verify M3 Max Wi-Fi-only hotspot scanner and local browser helper
         run: |
-          python3 -m py_compile m330-mobile-web/gateway/m3_onboard.py
-          python3 m330-mobile-web/gateway/m3_onboard.py --simulate | grep -q '"verified_hardware": false'
+          python3 -m py_compile m330-mobile-web/gateway/m3_onboard.py m330-mobile-web/gateway/m3_wifi_local.py m330-mobile-web/gateway/test_m3_wifi.py
+          python3 m330-mobile-web/gateway/m3_onboard.py --simulate | grep -q '"commands_enabled": false'
+          python3 -m unittest discover -s m330-mobile-web/gateway -p 'test_m3_wifi.py' -v
       - name: Verify robot motion simulation engine
         working-directory: m330-mobile-web/tests
         env:
