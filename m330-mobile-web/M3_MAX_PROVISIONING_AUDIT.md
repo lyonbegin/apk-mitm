@@ -1,50 +1,59 @@
-# Lefant M3 Max — v3.3.25 APK 등록·연결 코드 재검토
+# Lefant M3 Max — Wi-Fi 전용 연결 구현 및 APK v3.3.25 근거 (2026-11-03)
 
-## 증거 범위
-- 사용자 제공 Lefant_v3.3.25_APKPure.xapk, SHA-256: 66e705abaf0a118436d7e2ff034664fc5032ef2c5623d4b59b8ec7579de3a465
-- 앱 패키지: com.yunshi.robotlife. classes.dex~classes10.dex. APK의 DEX에서 타입·메서드 호출과 부분 디스어셈블을 추출한 정적 분석.
-- 실제 M3 Max 장비 연결, Wi-Fi 최초 설정, 장치 인증 또는 실기기 명령 성공은 확인되지 않음.
+## 적용 원칙
 
-## 원본에서 다시 확인한 등록 절차
-1. BindDeviceViewModel.startActivatorByTuya:
-   - ScanDeviceBean.getUuid/getDeviceType/getAddress/getMac.
-   - MultiModeActivatorBean 구성.
-   - ThingHomeSdk.getActivator → IActivator.newMultiModeActivator → IMultiModeActivator.startActivator.
-   - Bluetooth 발견 기기정보를 이용하는 복합 활성화 SDK 경로가 존재한다.
-2. BindDeviceViewModel.startActivatorByLivirobo:
-   - LiviroboSDK.get → LiviroboSDK.startActivatorDevice.
-   - 별도 Livirobo 활성화 경로도 존재한다. M3 Max의 실제 경로는 추가 검증 필요.
-3. DeviceNetDemoActivity, ConnectWifiFragment: 네트워크 등록 UI 관련 클래스.
-4. EquipmentConfig.getM3Max/getM3Series, DeviceM3: M3 모델 분기.
-5. ThingClips의 IThingDeviceActivator/getActivatorToken 메서드 참조 존재. API가 APK에 존재한다는 것이 실기기 키나 유효 활성화 토큰 보유를 의미하지는 않는다.
+**공식 Lefant 앱 설치 없이, Bluetooth 검색 없이, Wi-Fi 기반으로만 진행한다.**
 
-## 공식 프로토콜 제약
-Tuya 로봇의 AP/BLE 활성화에는 대체로 Wi-Fi 네트워크 정보와 Tuya 클라우드 활성화 토큰이 필요하다.
-- https://developer.tuya.com/en/docs/iot-device-dev/robot_distribution_network_active?id=Kd93npo32h4rl
-- https://agentic-kit.tuya.com/en/docs/tutorials/openapi-activate/
-공식 앱을 설치하지 않는 등록 흐름은 가능성을 검토할 수 있으나, Lefant 제조사 생산품이 임의의 Tuya 개발자 프로젝트로 활성화되는 것은 아직 검증되지 않았다.
+기존 웹: https://m330-web-github-production.up.railway.app/
+GitHub: lyonbegin/apk-mitm 브랜치 m330-pro-mobile-web
 
-## 이번 코드 적용
-- 기존 Railway 웹 index.ts에 M3 Max 전용 연결 진단 패널을 추가했다.
-- gateway/m3_onboard.py: BLE 광고 후보(Bleak), Wi-Fi AP 후보(nmcli/airport), Tuya LAN 후보(TinyTuya) 스캔.
-- 현장 웹 연결키 인증 POST /api/m3/onboarding/observe 에서는 검색 방식별 후보 수·상태만 받고, SSID/암호/MAC/Device ID/Local Key/활성화 토큰을 수집하지 않는다.
-- GET /api/m3/onboarding/status?robot_id=... 는 세션에 속한 로봇의 검색 결과만 읽는다.
-- pairing_completed:false, device_authenticated:false, commands_enabled:false 유지. 연결된 것처럼 표시하거나 하드웨어 제어 명령을 자동 전송하지 않는다.
-- 웹에서 연결키 재발급/해제 시 진단정보도 삭제한다.
-- 자동 테스트: Python 구문 및 --simulate, 서버 API 인증·비밀정보 제거·폐기.
+## APK 정적 분석
 
-## 사용
-1. https://m330-web-github-production.up.railway.app/ 열기.
-2. 로봇 이름을 M3 Max로 등록하고 선택 후 연결·진단에서 현장 연결키 발급.
-3. 현장 PC/Mac에서 git clone -b m330-pro-mobile-web https://github.com/lyonbegin/apk-mitm.git
-4. cd apk-mitm/m330-mobile-web/gateway
-5. python3 -m pip install tinytuya bleak
-6. 쉘에서 키를 비공개 입력: read -s M330_BRIDGE_KEY; export M330_BRIDGE_KEY
-7. 로봇의 네트워크 등록모드 및 컴퓨터 Wi-Fi/BLE 확인 후 python3 m3_onboard.py --scan --push
-8. 관리 웹의 M3 Max 검색 상태 새로고침. 발견은 등록 완료가 아니며 실제 모터 제어는 여전히 잠겨 있다.
+- 원본: Lefant_v3.3.25_APKPure.xapk; SHA-256 66e705abaf0a118436d7e2ff034664fc5032ef2c5623d4b59b8ec7579de3a465.
+- classes10.dex: DeviceConnetViewModel.getWifiInfo()에서 WifiUtils.getWIFISSID()와 SharedPrefs.getConnSuccessWifiPsw() 호출을 확인함.
+- classes10.dex: DeviceManagerUtils.getActivatorToken() → ThingHomeSdk.getActivatorInstance() → IThingDeviceActivator.getActivatorToken() 호출.
+- classes10.dex: BindDeviceViewModel.startActivatorByTuya()가 ThingHomeSdk.getActivator() → IActivator.newMultiModeActivator() → IMultiModeActivator.startActivator()를 호출함.
+- classes10.dex: BindDeviceViewModel.startActivatorByLivirobo()에 다른 SDK 등록 경로가 존재함.
+- 위 SDK 진입점은 '앱에 들어 있다'는 증거이며 M3 Max 기기의 실제 AP 등록 성공이나 토큰 확보를 증명하지 않음.
 
-## 미완료 및 실기기 필요 항목
-- M3 Max가 사용하는 BLE 서비스/등록 데이터의 실측.
-- 제조사 브랜드와 연결되는 클라우드 인증·활성화 토큰 취득 및 장치 등록.
-- AP/BLE를 통한 실제 Wi-Fi 설정 및 인증 결과 검증.
-- 장치의 원시 상태 조회, 실제 명령 페이로드, 지도 파싱과 이동 제어의 실기기 검증.
+Tuya 공식 AP 등록 규약에 따르면 장치 AP에 접근한 뒤 Wi-Fi SSID·비밀번호와 클라우드 활성화 토큰을 암호화된 AP 등록 프로토콜로 전달해야 한다. 활성화 토큰은 제조사 계정·클라우드에 연결된다. 유효한 토큰 없이 SSID만 보낸다고 최초 등록이 완료되지는 않는다.
+- https://support.tuya.com/en/help/_detail/K8wkp4syou0x1
+- https://developer.tuya.com/en/docs/iot-device-dev/tuyaos-gateway-pairing-wirless?id=Kc1nxtf5qspxb
+- https://developer.tuya.com/en/docs/app-development/extension-activator-ap?id=Kcy3878yku80y
+
+## 구현 항목
+
+### 기존 Railway 관리 웹
+- M3 Max를 별도 기종으로 등록/선택하고 저장.
+- BLE 버튼 제거. Wi-Fi AP/LAN 상태 출력만 수행.
+- 현장 연결 프로그램 인증키 발급, 연결 해제, 로봇별 보고 보존.
+- POST /api/m3/onboarding/observe: schema_version=2, phase=not_detected|wifi_ap_found|wifi_ap_connected|wifi_lan_detected.
+- 진단 허용값: ap_candidates, lan_candidates, scan_state, wifi_ap_joined.
+- SSID, Wi-Fi 암호, MAC, Device ID, Local Key 등의 추가 필드는 서버에 저장하지 않음.
+- Wi-Fi AP 연결 상태가 보고되더라도 device_authenticated=false, pairing_completed=false, commands_enabled=false.
+
+### 현장 Mac/PC Wi-Fi 도우미
+- gateway/m3_onboard.py: Wi-Fi AP 검색(networksetup/airport, nmcli, netsh), Tuya LAN 방송 검색(TinyTuya).
+- `--join-ap SSID`: 명시적으로 선택한 로봇 AP에 현장 OS의 Wi-Fi 접속 요청. 성공 시 OS에 현재 연결된 SSID가 일치하는지 확인. 장치 Wi-Fi 최초 등록이나 제조사 인증은 별도.
+- `--scan --push`: 현장 후보 검색 결과를 인증된 HTTPS 경유 Railway에 보고. AP 연결 시 인터넷 단절 가능성 존재.
+- gateway/m3_wifi_local.py: http://127.0.0.1:8765/ 전용 로컬 웹. Wi-Fi 검색·AP 선택 접속·원격 관리화면 상태 전송. localhost 전용, POST Origin/CSRF 검증. Wi-Fi 변경은 사용자 클릭 후 실행.
+
+## 이용 방법
+
+1. M3 Max 전원을 켭니다. 이미 공유기 Wi-Fi에 등록되어 있다면 초기화하지 않고 그대로 둡니다.
+2. 현장 Mac/PC에서 아래 명령으로 소스를 가져옵니다.
+   `git clone -b m330-pro-mobile-web https://github.com/lyonbegin/apk-mitm.git`
+   `cd apk-mitm/m330-mobile-web/gateway`
+3. `python3 -m pip install tinytuya` (LAN 검색용)
+4. `python3 m3_wifi_local.py`
+5. Mac/PC 브라우저에서 `http://127.0.0.1:8765/` 접속. 주변 M3 Max 계열 AP 후보를 찾고, 사용자 지정한 AP로 연결합니다.
+6. 관리 웹의 연결키를 현장 PC의 `M330_BRIDGE_KEY`에 입력하고 현장 프로그램에서 상태를 보고합니다. **서버가 외부에 있으므로 로봇 AP 접속 중 인터넷이 끊어지면 보고가 불가능할 수 있습니다.**
+7. 이미 Wi-Fi가 구성된 로봇의 상태 조회는 `m330_lan_probe.py --scan`와 실제 Device ID·Local Key가 확보된 후 `m330_bridge.py`로 확인합니다.
+
+## 검증 경계
+
+완료: Wi-Fi 현장 AP 검색 로직, 명시적인 로컬 Wi-Fi 연결 요청, 같은 네트워크 Tuya 발견, 관리 웹 진단 상태·인증키·개인정보 차단, 자동 시뮬레이션 및 API 테스트.
+
+미완료: M3 Max 특정 로봇 AP의 실측 SSID, AP 내부 인증 통신, 제조사 활성화 토큰, 홈 공유기 SSID/비밀번호 전달 암호화 프로토콜, 실제 기기 인증·Local Key 수신, 실기기 청소/이동 제어.
+
+**중요:** 웹브라우저나 Railway만으로 로컬 컴퓨터의 Wi-Fi를 전환할 수는 없다. 이를 위해 실행하는 현장 프로그램은 Lefant 공식 앱이 아니며 Wi-Fi 전용 코드다.
