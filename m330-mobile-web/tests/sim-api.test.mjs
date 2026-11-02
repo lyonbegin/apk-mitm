@@ -60,7 +60,11 @@ assert.ok(second.robot.id!==first);
 const m3=await call('/api/robots',{name:'실제 M3 Max 시험 등록',model:'M3 Max',floor_id:'gyeongae-2'},201);
 assert.equal(m3.robot.model,'M3 Max');
 assert.equal(m3.robot.simulation_profile,'M330_fallback_uncalibrated');
-const edited=await call('/api/robots/'+m3.robot.id,{name:'실제 M3 Max 시험 등록',model:'M3 Max',floor_id:'gyeongae-2'});
+const patchResponse=await fetch(BASE+'/api/robots/'+m3.robot.id,{method:'PATCH',
+ headers:{'Content-Type':'application/json',cookie},
+ body:JSON.stringify({name:'실제 M3 Max 시험 등록',model:'M3 Max',floor_id:'gyeongae-2'})});
+assert.equal(patchResponse.status,200);
+const edited=await patchResponse.json();
 assert.equal(edited.robot.model,'M3 Max');
 
 const secondState=await call('/api/sim/state?floor_id=gyeongae-3');
