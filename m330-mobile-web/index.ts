@@ -40,7 +40,8 @@ const BRIDGE_PANEL = `
 <li>로봇 AP가 발견되면 PC/Mac에서 <code>python3 m3_onboard.py --join-ap '실제로 검색된 AP 이름' --scan</code>을 실행하여 해당 Wi-Fi에 접속할 수 있습니다.</li>
 </ol>
 <p>로봇 AP에 접속하는 것과 로봇이 가정/학교 공유기에 등록되는 것은 다릅니다. 실제 최초 등록에는 펌웨어에 맞는 Wi-Fi 설정 프로토콜과 인증 토큰이 필요하므로 현재는 <b>Wi-Fi 검색·AP 접속·LAN 확인 단계</b>까지만 지원합니다.</p>
-<div class="m330-bridge-actions"><button onclick="m3RefreshDiscovery()">Wi-Fi 연결 상태 새로고침</button></div>
+<div class="m330-bridge-actions"><a href="http://127.0.0.1:8765/" target="_blank" rel="noopener noreferrer">현장 PC의 Wi-Fi 연결 도우미 열기</a><button onclick="m3RefreshDiscovery()">Wi-Fi 연결 상태 새로고침</button></div>
+<p>현장 PC에서 <code>python3 m3_wifi_local.py</code>를 실행하시면, 별도의 Lefant 앱 없이 로봇 Wi-Fi AP 목록 조회 및 선택 연결을 해당 브라우저 화면에서 진행할 수 있습니다. 컴퓨터가 꺼져 있거나 도우미가 실행되지 않으면 위 로컬 주소는 열리지 않습니다.</p>
 <pre id="m3-discovery-status" aria-live="polite">현장 Wi-Fi 검색 기록이 없습니다.</pre>
 <p>일반 HTTPS 웹페이지는 주변 Wi-Fi 목록을 직접 검색하거나 공유기/AP를 자동 전환할 수 없으므로 동일 네트워크 현장 프로그램에서 수행합니다. Wi-Fi 암호·기기 ID·Local Key는 Railway에 올리지 않습니다. 로봇 AP에 접속하면 인터넷이 잠시 끊겨 웹 보고가 중단될 수 있습니다.</p>
 </section></div>`;
