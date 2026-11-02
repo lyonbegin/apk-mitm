@@ -32,6 +32,10 @@ jobs:
         run: |
           npm install --no-audit --no-fund
           npx playwright install --with-deps chromium
+      - name: Verify M3 Max discovery agent without physical device
+        run: |
+          python3 -m py_compile m330-mobile-web/gateway/m3_onboard.py
+          python3 m330-mobile-web/gateway/m3_onboard.py --simulate | grep -q '"verified_hardware": false'
       - name: Verify robot motion simulation engine
         working-directory: m330-mobile-web/tests
         env:
