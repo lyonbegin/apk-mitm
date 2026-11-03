@@ -46,7 +46,7 @@ async function postOriginal(
  if(!ALLOWED.has(endpoint))throw new LefantOriginalError('UNAPPROVED_VENDOR_ENDPOINT');
  const url=new URL(ORIGINAL_LEFANT.host+endpoint);
  // These fields originate from the original APK's RestClientBuilder.getBaseParams.
- url.searchParams.set('language','ko-KR');
+ url.searchParams.set('language','zh-CN');
  url.searchParams.set('version_code','3.3.25');
  if(accessToken)url.searchParams.set('access_token',accessToken);
  // Original RestClient.post -> RestService.post with form-map params.
