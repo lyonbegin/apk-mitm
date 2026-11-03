@@ -72,6 +72,9 @@ Tuya 프로젝트를 보유하지 않으셨거나 제품 인증 권한이 없으
 <p>관리 웹에서 발급한 현장 연결키를 실행 PC의 M330_BRIDGE_KEY 환경변수에 설정해
 도우미를 실행하면 비식별 Wi-Fi 검색 결과를 전송할 수 있습니다.</p>
 <button type="button" id="upload">관리 웹에 검색 상태 보고</button>
+<p><label>선택한 M3 Max의 관리 웹 연결키 <input id="bridge-key" type="password" maxlength="64" autocomplete="off" placeholder="관리 웹에서 발급한 64자리 키"/></label></p>
+<button type="button" id="upload-paired">실제 클라우드 등록 결과 관리 웹에 반영</button>
+<pre id="activation-report-result"></pre>
 <pre id="upload-result"></pre>
 <p><a href="https://m330-web-github-production.up.railway.app/" target="_blank" rel="noopener">기존 M3 Max 관리 웹 열기</a></p></section>
 <script>
@@ -157,6 +160,20 @@ document.getElementById("pair-form").onsubmit=async(event)=>{
 setInterval(refreshPairStatus,3500);
 refreshPairStatus();
 
+document.getElementById("upload-paired").onclick=async()=>{
+ const key=document.getElementById("bridge-key").value.trim();
+ if(!/^[a-f0-9]{64}$/.test(key)){
+  text("activation-report-result","관리 웹에서 M3 Max 로봇을 선택해 발급받은 64자리 연결키를 입력하십시오.");
+  return;
+ }
+ try{
+  const result=await post("/api/pair/report",{bridge_key:key});
+  text("activation-report-result",result.agent_report_received?
+    "Railway 관리 웹에 실제 Tuya 클라우드 등록 결과를 전달했습니다. 실기기 명령은 아직 비활성화입니다.":
+    "등록 결과를 보고하지 못했습니다.");
+ }catch(e){text("activation-report-result","등록 결과 보고 실패: "+e.message);}
+ document.getElementById("bridge-key").value="";
+};
 document.getElementById("upload").onclick=async()=>{
  try{
   const d=await post("/api/upload",{});
@@ -243,6 +260,14 @@ class Handler(BaseHTTPRequestHandler):
                                            "robot_authenticated": False})
             except Exception as e:
                 return self._respond(409, {"error": str(e)})
+        if self.path == "/api/pair/report":
+            try:
+                key = obj.get("bridge_key", "") if isinstance(obj, dict) else ""
+                return self._respond(200, m3_pair_job.report_to_railway(key))
+            except ValueError:
+                return self._respond(422, {"error": "실제 클라우드 등록 성공 여부와 관리 웹 연결키를 확인하십시오."})
+            except Exception:
+                return self._respond(502, {"error": "Railway 보고 실패. 인터넷과 연결키를 확인하십시오."})
         if self.path == "/api/upload":
             key = os.environ.get("M330_BRIDGE_KEY", "")
             if not key:
