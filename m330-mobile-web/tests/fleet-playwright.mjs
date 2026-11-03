@@ -14,8 +14,9 @@ try {
   // Wi-Fi-only M3 onboarding must not expose any Bluetooth action in the web.
   assert.equal(await page.locator('button[onclick*="Bluetooth"],button[onclick*="Ble"]').count(),0);
   assert.equal(await page.locator('a[href="http://127.0.0.1:8765/"]').count(),0);
-  assert.equal(await page.locator('#m3-apk-download[href$="/m3-max-setup.apk"]').count(),1);
-  assert.equal(await page.locator('img.m3-apk-qr[src^="data:image/png;base64,"]').count(),1);
+  assert.equal(await page.locator('#m3-apk-download').count(),0);
+  assert.equal(await page.locator('img.m3-apk-qr').count(),0);
+  assert.equal(await page.getByText('기존에 제공하던 M3 Max Wi-Fi EZ 시제품 APK는 원본 Lefant 앱과 다른 프로그램', {exact:false}).count(),1);
   assert.equal(await page.locator('#m3-android-onboarding').count(),1);
   assert.equal(await page.locator('#m3-discovery-status').count(),1);
   assert.equal(await page.locator('#new-robot-model option[value="M3 Max"]').count(),1);
