@@ -1,0 +1,54 @@
+name: M3 Max Wi-Fi Setup Android APK
+on:
+  push:
+    branches:
+      - m330-pro-mobile-web
+    paths:
+      - 'm3-max-android/**'
+      - '.github/workflows/m3-max-android-apk.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Build installable Android debug APK
+        working-directory: m3-max-android
+        run: gradle --no-daemon --stacktrace --console=plain :app:assembleDebug
+      - name: Verify built APK and signing
+        run: |
+          cp m3-max-android/app/build/outputs/apk/debug/app-debug.apk m3-max-setup.apk
+          test -s m3-max-setup.apk
+          find "${ANDROID_HOME}/build-tools" -name apksigner -type f | sort -V | tail -1 | xargs -I{} {} verify --verbose m3-max-setup.apk
+          sha256sum m3-max-setup.apk | tee m3-max-setup.sha256
+      - name: Upload APK build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: m3-max-setup-debug-apk
+          path: |
+            m3-max-setup.apk
+            m3-max-setup.sha256
+          retention-days: 30
+      - name: Publish APK for public web QR download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view m3-max-setup-v0.1.0 >/dev/null 2>&1; then
+            gh release upload m3-max-setup-v0.1.0 m3-max-setup.apk m3-max-setup.sha256 --clobber
+          else
+            gh release create m3-max-setup-v0.1.0 m3-max-setup.apk m3-max-setup.sha256 --target "$GITHUB_SHA" --title "M3 Max Wi-Fi 등록 Android APK v0.1.0" --notes "Android 8+, debug-signed for direct installation. Wi-Fi EZ registration requires user-authorized Tuya credentials and M3 Max compatibility. Actual hardware pairing remains unverified."
+          fi
