@@ -11,6 +11,17 @@ async function call(path,body,expected=200){
 const before=await call('/api/dashboard');
 const first=before.robots[0].id;
 assert.ok(first>0);
+const originalSession=await call('/api/lefant/original/session');
+assert.equal(originalSession.signed_in,false);
+assert.equal(originalSession.source,'lefant_original');
+assert.equal(originalSession.commands_enabled,false);
+const anonymousDevices=await fetch(BASE+'/api/lefant/original/devices',{headers:{cookie}});
+assert.equal(anonymousDevices.status,401);
+const forbiddenLogin=await fetch(BASE+'/api/lefant/original/login',{method:'POST',
+ headers:{'Content-Type':'application/json',cookie},body:JSON.stringify({account:'nobody@example.com',password:'should-not-be-sent'})});
+assert.equal(forbiddenLogin.status,403);
+console.log('PASS original Lefant server APIs: unauthenticated device listing denied and cross-origin login blocked');
+
 const initial=await call('/api/sim/state?floor_id=myeonhak-5');
 assert.equal(initial.robots.length,1);
 assert.equal(initial.robots[0].state,'idle');
