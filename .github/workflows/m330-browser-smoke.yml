@@ -62,6 +62,8 @@ jobs:
             -H 'Content-Type: application/json' --data '{"ssid":"SmartLife"}')
           test "$http_code" = 403
 
+      - name: Validate exact Lefant original API adapter with mocked vendor responses
+        run: bun test m330-mobile-web/tests/lefant-original.test.ts
       - name: Verify robot motion simulation engine
         working-directory: m330-mobile-web/tests
         env:
