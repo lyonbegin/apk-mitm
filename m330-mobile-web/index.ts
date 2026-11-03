@@ -29,16 +29,22 @@ const BRIDGE_PANEL = `
 <p>원본 XAPK는 기본 APK와 19개 분할 APK로 구성되어 있습니다. 원본의 전체 코드 및 서명, 리소스를 변경하지 않은 1:1 설치 묶음을 별도로 확인했습니다. 이 페이지에는 아직 해당 원본 설치 묶음의 다운로드 파일이 등록되어 있지 않습니다.</p>
 <p>원본 전체가 아닌 기능별 재작성 앱으로 대체하지 않겠습니다. 원본 파일 배포 경로가 확인되기 전에는 잘못된 APK 다운로드 QR을 표시하지 않습니다.</p>
 </section>
-<section class="m3-setup-step" aria-label="웹 관리 연결">
-<h3>2. 웹 관리 대상과 연결</h3>
-<p>웹에서 기종 <b>M3 Max</b>로 로봇을 추가·선택하고 아래의 <b>등록 연결키 발급</b>을 누르십시오. 표시된 연결키를 Android 앱에 입력하면, 클라우드 등록에 성공했을 때 결과가 이 로봇에 반영됩니다.</p>
+<section class="m3-setup-step" aria-label="Lefant 원본 계정 인증">
+<h3>2. Lefant 원본 계정 연결</h3>
+<p>제공받은 원본 앱 v3.3.25에서 추출한 제조사 로그인 API를 사용합니다. <b>Tuya 개발자 Client ID·Secret은 요구하지 않습니다.</b> 원본 Lefant 계정으로만 인증합니다.</p>
+<form id="lefant-original-form" onsubmit="return lefantOriginalLogin(event)">
+<p><label>Lefant 계정 <input id="lefant-original-account" name="account" type="text" required autocomplete="username" maxlength="150" style="width:100%;padding:10px;border:1px solid #888;border-radius:6px"/></label></p>
+<p><label>Lefant 비밀번호 <input id="lefant-original-password" name="password" type="password" required autocomplete="current-password" maxlength="200" style="width:100%;padding:10px;border:1px solid #888;border-radius:6px"/></label></p>
 <div class="m330-bridge-actions">
-<button onclick="m330BridgePair()">등록 연결키 발급</button>
-<button onclick="m3RefreshDiscovery()">등록 상태 새로고침</button>
-<button onclick="m330BridgeRevoke()">연결 해제</button>
+<button type="submit" id="lefant-original-login-button">원본 Lefant 서버 로그인</button>
+<button type="button" onclick="lefantOriginalDeviceList()">원본 기기 목록 조회</button>
+<button type="button" onclick="lefantOriginalCatalog()">원본 제품·등록 방식 조회</button>
+<button type="button" onclick="lefantOriginalLogout()">로그아웃</button>
 </div>
-<pre id="m330-bridge-key" hidden></pre>
-<p>연결키는 1회만 보이며, 기기 자체의 Wi-Fi 비밀번호나 Tuya 활성화 토큰이 아닙니다. 보관 및 입력에 주의하십시오.</p>
+</form>
+<pre id="lefant-original-state" aria-live="polite">Lefant 원본 서버 인증 전입니다. 계정 정보를 Railway 서버에 전달하는 것은 로그인 버튼을 눌렀을 때뿐입니다.</pre>
+<pre id="lefant-original-data" aria-live="polite">원본 제조사 기기 목록 조회 전</pre>
+<p>인증 토큰은 해당 브라우저 세션의 Railway 서버 메모리에만 보관하고 비밀번호는 저장하지 않습니다. 실제 로봇 제어는 인증·제품별 명령 매핑 확인 전까지 비활성화됩니다.</p>
 </section>
 <section class="m3-setup-step" aria-label="M3 Max 등록 상태">
 <h3>3. 등록 결과·상태 확인</h3>
@@ -49,6 +55,56 @@ const BRIDGE_PANEL = `
 </section>
 </div>`;
 const BRIDGE_SCRIPT = `<script>
+async function lefantOriginalRequest(path,form){
+ const options=form?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)}:{method:'GET'};
+ const res=await fetch('/api/lefant/original/'+path,{...options,cache:'no-store',credentials:'same-origin'});
+ const data=await res.json();
+ if(!res.ok)throw new Error(data.error||'LEFANT_REQUEST_FAILED');
+ return data;
+}
+async function lefantOriginalLogin(event){
+ event.preventDefault();
+ const button=document.getElementById('lefant-original-login-button');
+ const account=document.getElementById('lefant-original-account').value.trim();
+ const passwordInput=document.getElementById('lefant-original-password');
+ const password=passwordInput.value;
+ button.disabled=true;
+ try{
+  document.getElementById('lefant-original-state').textContent='원본 Lefant 서버에 계정 인증을 요청합니다.';
+  const data=await lefantOriginalRequest('login',{account,password});
+  document.getElementById('lefant-original-state').textContent=data.signed_in?
+    '원본 Lefant 계정 인증 성공 · 세션이 연결됐습니다.': '원본 Lefant 계정 인증 미확인';
+ }catch(e){
+  document.getElementById('lefant-original-state').textContent='Lefant 원본 인증 실패: '+e.message;
+ }finally{
+  passwordInput.value='';
+  button.disabled=false;
+ }
+ return false;
+}
+async function lefantOriginalDeviceList(){
+ const el=document.getElementById('lefant-original-data');
+ try{
+  el.textContent='원본 Lefant 서버의 계정 기기 목록 조회 중';
+  const d=await lefantOriginalRequest('devices');
+  el.textContent='Lefant 기기 목록 서버 응답 (읽기 전용)\\n'+JSON.stringify(d.response,null,2);
+ }catch(e){el.textContent='기기 목록 조회 실패: '+e.message;}
+}
+async function lefantOriginalCatalog(){
+ const el=document.getElementById('lefant-original-data');
+ try{
+  el.textContent='원본 Lefant 제품 목록에서 M3 Max 등록 방식을 조회합니다.';
+  const d=await lefantOriginalRequest('products');
+  el.textContent='Lefant 제품 목록 서버 응답 (읽기 전용)\\n'+JSON.stringify(d.response,null,2);
+ }catch(e){el.textContent='제품 목록 조회 실패: '+e.message;}
+}
+async function lefantOriginalLogout(){
+ try{
+  await lefantOriginalRequest('logout',{});
+  document.getElementById('lefant-original-state').textContent='Lefant 서버 세션이 이 웹에서 해제되었습니다.';
+  document.getElementById('lefant-original-data').textContent='원본 Lefant 기기 정보 미연결';
+ }catch(e){document.getElementById('lefant-original-state').textContent='로그아웃 실패: '+e.message;}
+}
 async function m330BridgeRefresh(){
  const id=window.selectedRobotId;
  if(!id)return;
