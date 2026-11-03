@@ -9,42 +9,45 @@ const PAGE = "<!doctype html>\n<html lang=\"ko\"><head><meta charset=\"utf-8\"><
 
 const BRIDGE_PANEL = `
 <style>
-.m330-bridge-card{margin:14px 0;border:1px solid #beded3;border-radius:18px;background:#f1faf6;padding:16px}
-.m330-bridge-card h2{font-size:17px;margin:2px 0 10px;color:#13594d}
-.m330-bridge-card p{font-size:12px;color:#4f786c;line-height:1.6}
-.m330-bridge-card pre{font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere;background:#fff;border-radius:10px;padding:12px}
-.m330-bridge-card button{padding:10px 12px;border:1px solid #91bfb0;border-radius:9px;background:#fff;color:#13594d;font-size:12px;font-weight:800}
+.m330-bridge-card{margin:14px 0;border:1px solid #bbb;border-radius:14px;background:#fff;padding:16px}
+.m330-bridge-card h2{font-size:18px;margin:2px 0 10px}
+.m330-bridge-card p{font-size:13px;line-height:1.7}
+.m330-bridge-card pre{font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;background:#f8f8f8;border-radius:8px;padding:12px}
+.m330-bridge-card button{padding:10px 12px;border:1px solid #888;border-radius:8px;background:white;color:#222;font-size:13px;font-weight:700}
 .m330-bridge-actions{display:flex;gap:8px;flex-wrap:wrap}
+.m3-apk-qr{width:245px;height:245px;max-width:100%;image-rendering:pixelated;background:#fff;border:1px solid #ddd}
+.m330-bridge-card a{color:inherit;text-decoration:underline}
+.m3-setup-step{border-top:1px solid #ddd;padding-top:13px;margin-top:15px}
 </style>
-<div class="m330-bridge-card">
-<h2>실기기 LAN 진단 연결</h2>
-<p><b>읽기 전용 연결입니다.</b> 현장 PC에서 로봇 상태를 조회하여 웹에 표시합니다. 로봇 청소 시작·일시정지·충전 명령은 전송하지 않습니다.</p>
-<p id="m330-bridge-summary">연결상태 확인 중</p>
+<div class="m330-bridge-card" id="m3-android-onboarding">
+<h2>M3 Max · Android 등록</h2>
+<p><b>등록할 때만 Android 앱을 사용합니다.</b> 앱으로 Wi-Fi EZ 등록을 수행한 뒤 이 웹페이지에서 로봇을 관리합니다. Lefant 공식 앱과 Bluetooth는 사용하지 않습니다.</p>
+<section class="m3-setup-step" aria-label="Android APK 설치">
+<h3>1. Android 등록 앱 설치</h3>
+<img class="m3-apk-qr" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPUAAAD1AQAAAACgyo7IAAAC0UlEQVR42u2ZMXLkOAxFH5quYmfsG7BPInmONVXySLZ8L0vti1A3oDKqqlt/A/Wmk2ywDIyIEpJfAPjxAZr4m20n/m4//h//f/SvZnZaXxZ75ZMz6wvc1jczs6EO/L008WiB37aeeFzt7UKUciXxfdgZXNL7xaXwFYdFH2HATjXlP2xXWN+uNHTR/lRXn+vAuZVPxbJL3KrC51QIft7MttbayyfSMqC9FnzvZq/r1vo5gx+X7Xq+wWJ2qQAfetodL92jZg3R7/TH31ID/w2LmY1pbc3PNKvm7ZdeOM818B9Sdkl7uEfNGTQBmoLk91BB/JA0Jj/nPkk6UCVaSZpVCT6pNHRoDwNH1ABo6CvBl4plpyOrs5S8cof2SvDlLmrHye/hjpSJWAav3Fdxf8PA+QYLNz7jdgpj8o84xK2K/nvcj9LgkvagJOUOKTv5qZb8OmnOLvlZd/wO0UujVAu/HNQyQKs7fs4ulQYn2kr4JRMh3GOBPhXoE4QxYbkafqHNfSqWiZpzF/0OEarpH8LykenjRBOGWKrBJ5UmDBTCnePUBCWvWuqvQxNOpQmjCmFMxQ6lpWrqrwlSaXCHUqCtpn889ekUlPyce/mdPkm5i6WtRp9ybni0RdGu6ynY1V6B8LHWMZ+Hge20vixnWzQHZfBfF5btTy39V8nvYZTfDxGoQ8kU6CvJb9xO62Z8Z5f4Xl4oN5xocx3xy12kzS7R6h4LYRTghNXCfy5popemMKbnZxhVDb9kJw7Bkvvk9zAe41w9+g8KQUnSmDSFeywNUE1+JR1BhA4a+qQ595Xov3/3pzzMz3qJ/oPH1drL41rP/qqXJjpKg0vrLw2xgEvoUgu/4Ofs5PWUfs/VWlvJfHnYb1tPYVQBl87fuU/6ikM98XsuXFIx6SDBauZznAq8m73ZEP2+DnALFc3nGbDcRUlD9BNO2qmFX+znffDH/z/6/wHtkXTnv5vwPgAAAABJRU5ErkJggg==" width="245" height="245" alt="M3 Max Wi-Fi 등록 Android APK 다운로드 QR 코드"/>
+<p><a id="m3-apk-download" href="https://github.com/lyonbegin/apk-mitm/releases/download/m3-max-setup-v0.1.0/m3-max-setup.apk" target="_blank" rel="noopener noreferrer">M3 Max 등록 APK 다운로드</a></p>
+<p>Android 휴대전화로 위 QR코드를 스캔하거나 다운로드 링크를 누르십시오. GitHub에 배포된 설치 파일로 연결됩니다.</p>
+<p>앱은 Wi-Fi EZ와 Tuya 클라우드 등록을 시도합니다. M3 Max 기기의 EZ 지원 여부와 제조사 등록 권한은 실기기에서 확인해야 합니다.</p>
+</section>
+<section class="m3-setup-step" aria-label="웹 관리 연결">
+<h3>2. 웹 관리 대상과 연결</h3>
+<p>웹에서 기종 <b>M3 Max</b>로 로봇을 추가·선택하고 아래의 <b>등록 연결키 발급</b>을 누르십시오. 표시된 연결키를 Android 앱에 입력하면, 클라우드 등록에 성공했을 때 결과가 이 로봇에 반영됩니다.</p>
 <div class="m330-bridge-actions">
-<button onclick="m330BridgeRefresh()">상태 새로고침</button>
-<button onclick="m330BridgePair()">연결키 새로 발급</button>
+<button onclick="m330BridgePair()">등록 연결키 발급</button>
+<button onclick="m3RefreshDiscovery()">등록 상태 새로고침</button>
 <button onclick="m330BridgeRevoke()">연결 해제</button>
 </div>
-<p>발급된 연결키는 한 번만 보입니다. 현장 PC의 <b>M330_BRIDGE_KEY</b> 환경변수에 입력해 주십시오. 기존 키는 재발급 시 폐기됩니다.</p>
 <pre id="m330-bridge-key" hidden></pre>
-<pre id="m330-bridge-observation">실제 장치 관측 정보 없음</pre>
-<p>현장 도구: <code>gateway/m330_lan_probe.py</code> · <code>gateway/m330_bridge.py</code>. 웹에서 로봇이 자동 발견되는 방식은 아닙니다.</p>
-
-<section style="margin-top:14px;padding:12px;border:1px solid #aaa;border-radius:8px" aria-label="M3 Max Wi-Fi 연결">
-<h3>M3 Max Wi-Fi 연결</h3>
-<p><b>Bluetooth를 사용하지 않습니다.</b> Wi-Fi 공유기 연결(LAN)과 로봇이 직접 제공하는 Wi-Fi AP 연결을 구분하여 확인합니다. 공식 Lefant 앱을 설치하지 않아도 진단할 수 있습니다.</p>
-<ol>
-<li>로봇이 이미 공유기에 연결되어 있다면 로봇과 같은 Wi-Fi에 연결된 현장 PC/Mac에서 검색하십시오.</li>
-<li>최초 연결이라면 M3 Max를 네트워크 등록 모드로 설정한 다음 로봇이 제공하는 Wi-Fi AP를 검색하십시오.</li>
-<li>현장 PC/Mac에서 <code>python3 -m pip install tinytuya</code> 후 <code>python3 m3_onboard.py --scan --push</code>를 실행하십시오. 위의 <b>연결키 새로 발급</b> 키는 PC의 <code>M330_BRIDGE_KEY</code>로 입력합니다.</li>
-<li>로봇 AP가 발견되면 PC/Mac에서 <code>python3 m3_onboard.py --join-ap '실제로 검색된 AP 이름' --scan</code>을 실행하여 해당 Wi-Fi에 접속할 수 있습니다.</li>
-</ol>
-<p>로봇 AP에 접속하는 것과 로봇이 가정/학교 공유기에 등록되는 것은 다릅니다. 실제 최초 등록에는 펌웨어에 맞는 Wi-Fi 설정 프로토콜과 인증 토큰이 필요하므로 현재는 <b>Wi-Fi 검색·AP 접속·LAN 확인 단계</b>까지만 지원합니다.</p>
-<div class="m330-bridge-actions"><a href="http://127.0.0.1:8765/" target="_blank" rel="noopener noreferrer">현장 PC의 Wi-Fi 연결 도우미 열기</a><button onclick="m3RefreshDiscovery()">Wi-Fi 연결 상태 새로고침</button></div>
-<p>현장 PC에서 <code>python3 m3_wifi_local.py</code>를 실행하시면, 별도의 Lefant 앱 없이 로봇 Wi-Fi AP 목록 조회 및 선택 연결을 해당 브라우저 화면에서 진행할 수 있습니다. 컴퓨터가 꺼져 있거나 도우미가 실행되지 않으면 위 로컬 주소는 열리지 않습니다.</p>
-<pre id="m3-discovery-status" aria-live="polite">현장 Wi-Fi 검색 기록이 없습니다.</pre>
-<p>일반 HTTPS 웹페이지는 주변 Wi-Fi 목록을 직접 검색하거나 공유기/AP를 자동 전환할 수 없으므로 동일 네트워크 현장 프로그램에서 수행합니다. Wi-Fi 암호·기기 ID·Local Key는 Railway에 올리지 않습니다. 로봇 AP에 접속하면 인터넷이 잠시 끊겨 웹 보고가 중단될 수 있습니다.</p>
-</section></div>`;
+<p>연결키는 1회만 보이며, 기기 자체의 Wi-Fi 비밀번호나 Tuya 활성화 토큰이 아닙니다. 보관 및 입력에 주의하십시오.</p>
+</section>
+<section class="m3-setup-step" aria-label="M3 Max 등록 상태">
+<h3>3. 등록 결과·상태 확인</h3>
+<pre id="m3-discovery-status" aria-live="polite">선택한 로봇의 등록 상태를 확인합니다.</pre>
+<p id="m330-bridge-summary">현장 연결 상태 확인 중</p>
+<pre id="m330-bridge-observation">실제 로봇 상태 데이터 미수신</pre>
+<p>클라우드 등록 성공 보고와 실제 로봇의 주행·청소 제어 검증은 구분됩니다. 실기기 제어가 확인되기 전까지 가상 청소 버튼은 실제 로봇에 전달되지 않습니다.</p>
+</section>
+</div>`;
 const BRIDGE_SCRIPT = `<script>
 async function m330BridgeRefresh(){
  const id=window.selectedRobotId;
@@ -66,7 +69,7 @@ async function m330BridgePair(){
   const r=await fetch('/api/gateway/pair',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({robot_id:id})});
   const d=await r.json();if(!r.ok)throw Error(d.detail||'발급 실패');
   const e=document.getElementById('m330-bridge-key');e.hidden=false;
-  e.textContent='로봇 ID: '+id+'\\nM330_BRIDGE_KEY='+d.pair_key+'\\n현장 PC에서 환경변수를 설정하고 gateway/m330_bridge.py 실행';
+  e.textContent='로봇 ID: '+id+'\\nAndroid 앱의 웹 연결키 입력란: '+d.pair_key+'\\n앱에서 등록 성공 후 웹으로 보고됩니다.';
   m330BridgeRefresh();
  }catch(e){alert('연결키 발급 실패: '+e.message)}
 }
@@ -82,32 +85,22 @@ async function m330BridgeRevoke(){
 setInterval(m330BridgeRefresh,25000);
 
 async function m3RefreshDiscovery(){
- const box=document.getElementById('m3-discovery-status');
+ const out=document.getElementById('m3-discovery-status');
  const id=window.selectedRobotId;
- if(!box||!id)return;
+ if(!out||!id)return;
  try{
   const r=await fetch('/api/m3/onboarding/status?robot_id='+encodeURIComponent(id),{cache:'no-store'});
-  const data=await r.json();
-  if(!r.ok)throw Error(data.detail||'Wi-Fi 조회 실패');
-  const names={
-   not_detected:'Wi-Fi 로봇 후보 없음 또는 검색 제한',
-   wifi_ap_found:'로봇 Wi-Fi AP 후보 검색됨 (접속 전)',
-   wifi_ap_connected:'현장 PC가 로봇 계열 Wi-Fi AP에 연결된 것으로 관측됨 (로봇 인증 전)',
-   wifi_lan_detected:'같은 공유기의 Tuya LAN 후보 검색됨 (M3 Max 식별 전)'
-  };
-  const o=data.observation;
-  box.textContent=o?(
-   '최근 검색: '+o.last_seen+'\\n'+(names[o.phase]||o.phase)+
-   '\\n로봇 Wi-Fi AP 후보: '+o.diagnostics.ap_candidates+
-   ' / Tuya LAN 후보: '+o.diagnostics.lan_candidates+
-   '\\n현장 PC의 후보 AP 연결: '+(o.diagnostics.wifi_ap_joined?'확인':'미확인')+
-   '\\n검색 상태: '+o.diagnostics.scan_state+
-   '\\n실기기 상태 응답: '+(data.gateway_online?'수신 (기종 별도 검증)':'미수신')+
-   '\\nTuya 클라우드 등록(현장보고): '+(data.cloud_activation_report?'등록 성공 보고 수신':'성공 보고 없음')+
-   '\\nWi-Fi 공유기 최초 등록 / 로봇 인증: 미검증'+
-   '\\n실제 로봇 제어: 비활성화'
-  ):'연결 진단 기록 없음. 현장 PC에서 m3_onboard.py --scan --push를 실행하십시오.';
- }catch(e){box.textContent='Wi-Fi 진단 조회 실패: '+e.message}
+  const d=await r.json();
+  if(!r.ok)throw Error(d.detail||'등록 상태 조회 실패');
+  const registration=d.cloud_activation_report;
+  const observed=d.gateway_online;
+  out.textContent='선택한 로봇: '+(window.currentRobot&&currentRobot()?currentRobot().name:'M3 Max')+
+   '\\nAndroid 앱의 Tuya 클라우드 등록 보고: '+(registration?'수신':'없음')+
+   (registration?'\\n등록 보고 시각: '+registration.reported_at+'\\n비식별 기기 지문: '+registration.device_ref:'')+
+   '\\n웹 서버의 독립 클라우드 검증: 미수행'+
+   '\\n실제 LAN 상태 응답: '+(observed?'수신':'미수신')+
+   '\\n실제 로봇 인증·주행 제어: 미검증 / 비활성화';
+ }catch(e){out.textContent='등록 결과 조회 실패: '+e.message;}
 }
 setInterval(m3RefreshDiscovery,15000);
 
