@@ -1,0 +1,12 @@
+{
+  "name": "m3-max-wifi-provisioner",
+  "private": true,
+  "version": "0.1.0",
+  "description": "No-Lefant-app M3 Max Wi-Fi EZ registration attempt using Tuya cloud authorization",
+  "dependencies": {
+    "@tuyapi/link": "0.5.0"
+  },
+  "scripts": {
+    "selftest": "node m3_pair_ez.cjs --self-test"
+  }
+}
