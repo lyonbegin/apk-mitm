@@ -18,6 +18,11 @@ try {
   assert.equal(await page.locator('img.m3-apk-qr').count(),0);
   assert.equal(await page.getByText('기존에 제공하던 M3 Max Wi-Fi EZ 시제품 APK는 원본 Lefant 앱과 다른 프로그램', {exact:false}).count(),1);
   assert.equal(await page.locator('#m3-android-onboarding').count(),1);
+  assert.equal(await page.locator('#lefant-original-form').count(),1);
+  assert.equal(await page.locator('#lefant-original-account').count(),1);
+  assert.equal(await page.locator('#lefant-original-password').count(),1);
+  assert.equal(await page.locator('#lefant-original-login-button').count(),1);
+  assert.equal(await page.getByText('Tuya 개발자 Client ID·Secret은 요구하지 않습니다.',{exact:false}).count(),1);
   assert.equal(await page.locator('#m3-discovery-status').count(),1);
   assert.equal(await page.locator('#new-robot-model option[value="M3 Max"]').count(),1);
 
