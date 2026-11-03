@@ -22,7 +22,7 @@ const BRIDGE_PANEL = `
 </style>
 <div class="m330-bridge-card" id="m3-android-onboarding">
 <h2>M3 Max · Android 등록</h2>
-<p><b>등록할 때만 Android 앱을 사용합니다.</b> 앱으로 Wi-Fi EZ 등록을 수행한 뒤 이 웹페이지에서 로봇을 관리합니다. Lefant 공식 앱과 Bluetooth는 사용하지 않습니다.</p>
+<p><b>제공된 Lefant 원본 v3.3.25를 기준으로 연결합니다.</b> 최초 등록은 원본 앱의 실제 SDK 등록 절차를 보존합니다. 별도 Tuya 개발자 계정이나 임의로 작성한 Wi-Fi EZ 앱을 사용하지 않습니다.</p>
 <section class="m3-setup-step" aria-label="원본 Lefant APK 설치">
 <h3>1. 원본 Lefant v3.3.25 설치</h3>
 <p><b>기존에 제공하던 M3 Max Wi-Fi EZ 시제품 APK는 원본 Lefant 앱과 다른 프로그램이므로 등록용으로 사용하지 마십시오.</b></p>
@@ -145,18 +145,19 @@ async function m3RefreshDiscovery(){
  const id=window.selectedRobotId;
  if(!out||!id)return;
  try{
-  const r=await fetch('/api/m3/onboarding/status?robot_id='+encodeURIComponent(id),{cache:'no-store'});
-  const d=await r.json();
-  if(!r.ok)throw Error(d.detail||'등록 상태 조회 실패');
-  const registration=d.cloud_activation_report;
-  const observed=d.gateway_online;
+  const [res,authRes]=await Promise.all([
+   fetch('/api/m3/onboarding/status?robot_id='+encodeURIComponent(id),{cache:'no-store'}),
+   fetch('/api/lefant/original/session',{cache:'no-store'})
+  ]);
+  const d=await res.json(),a=await authRes.json();
+  if(!res.ok||!authRes.ok)throw Error('조회 실패');
   out.textContent='선택한 로봇: '+(window.currentRobot&&currentRobot()?currentRobot().name:'M3 Max')+
-   '\\nAndroid 앱의 Tuya 클라우드 등록 보고: '+(registration?'수신':'없음')+
-   (registration?'\\n등록 보고 시각: '+registration.reported_at+'\\n비식별 기기 지문: '+registration.device_ref:'')+
-   '\\n웹 서버의 독립 클라우드 검증: 미수행'+
-   '\\n실제 LAN 상태 응답: '+(observed?'수신':'미수신')+
-   '\\n실제 로봇 인증·주행 제어: 미검증 / 비활성화';
- }catch(e){out.textContent='등록 결과 조회 실패: '+e.message;}
+   '\\n원본 Lefant 계정 인증: '+(a.signed_in?'현재 세션 로그인됨':'로그인 필요')+
+   '\\n제조사 서버 실기기 목록: '+(a.signed_in?'기기 목록 조회 버튼으로 확인':'조회 전')+
+   '\\n실제 LAN 기기 상태: '+(d.gateway_online?'현장 게이트웨이 데이터 수신':'미수신')+
+   '\\n원본 앱의 기기 SDK 등록·명령: 웹 이식 검증 전'+
+   '\\n실기기 청소 제어: 비활성화';
+ }catch(e){out.textContent='원본 Lefant 연결 상태 조회 실패: '+e.message;}
 }
 setInterval(m3RefreshDiscovery,15000);
 
