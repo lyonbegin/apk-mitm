@@ -22,12 +22,11 @@ const BRIDGE_PANEL = `
 <div class="m330-bridge-card" id="m3-android-onboarding">
 <h2>M3 Max · Android 등록</h2>
 <p><b>등록할 때만 Android 앱을 사용합니다.</b> 앱으로 Wi-Fi EZ 등록을 수행한 뒤 이 웹페이지에서 로봇을 관리합니다. Lefant 공식 앱과 Bluetooth는 사용하지 않습니다.</p>
-<section class="m3-setup-step" aria-label="Android APK 설치">
-<h3>1. Android 등록 앱 설치</h3>
-<img class="m3-apk-qr" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPUAAAD1AQAAAACgyo7IAAAC0UlEQVR42u2ZMXLkOAxFH5quYmfsG7BPInmONVXySLZ8L0vti1A3oDKqqlt/A/Wmk2ywDIyIEpJfAPjxAZr4m20n/m4//h//f/SvZnZaXxZ75ZMz6wvc1jczs6EO/L008WiB37aeeFzt7UKUciXxfdgZXNL7xaXwFYdFH2HATjXlP2xXWN+uNHTR/lRXn+vAuZVPxbJL3KrC51QIft7MttbayyfSMqC9FnzvZq/r1vo5gx+X7Xq+wWJ2qQAfetodL92jZg3R7/TH31ID/w2LmY1pbc3PNKvm7ZdeOM818B9Sdkl7uEfNGTQBmoLk91BB/JA0Jj/nPkk6UCVaSZpVCT6pNHRoDwNH1ABo6CvBl4plpyOrs5S8cof2SvDlLmrHye/hjpSJWAav3Fdxf8PA+QYLNz7jdgpj8o84xK2K/nvcj9LgkvagJOUOKTv5qZb8OmnOLvlZd/wO0UujVAu/HNQyQKs7fs4ulQYn2kr4JRMh3GOBPhXoE4QxYbkafqHNfSqWiZpzF/0OEarpH8LykenjRBOGWKrBJ5UmDBTCnePUBCWvWuqvQxNOpQmjCmFMxQ6lpWrqrwlSaXCHUqCtpn889ekUlPyce/mdPkm5i6WtRp9ybni0RdGu6ynY1V6B8LHWMZ+Hge20vixnWzQHZfBfF5btTy39V8nvYZTfDxGoQ8kU6CvJb9xO62Z8Z5f4Xl4oN5xocx3xy12kzS7R6h4LYRTghNXCfy5popemMKbnZxhVDb9kJw7Bkvvk9zAe41w9+g8KQUnSmDSFeywNUE1+JR1BhA4a+qQ595Xov3/3pzzMz3qJ/oPH1drL41rP/qqXJjpKg0vrLw2xgEvoUgu/4Ofs5PWUfs/VWlvJfHnYb1tPYVQBl87fuU/6ikM98XsuXFIx6SDBauZznAq8m73ZEP2+DnALFc3nGbDcRUlD9BNO2qmFX+znffDH/z/6/wHtkXTnv5vwPgAAAABJRU5ErkJggg==" width="245" height="245" alt="M3 Max Wi-Fi 등록 Android APK 다운로드 QR 코드"/>
-<p><a id="m3-apk-download" href="https://github.com/lyonbegin/apk-mitm/releases/download/m3-max-setup-v0.1.0/m3-max-setup.apk" target="_blank" rel="noopener noreferrer">M3 Max 등록 APK 다운로드</a></p>
-<p>Android 휴대전화로 위 QR코드를 스캔하거나 다운로드 링크를 누르십시오. GitHub에 배포된 설치 파일로 연결됩니다.</p>
-<p>앱은 Wi-Fi EZ와 Tuya 클라우드 등록을 시도합니다. M3 Max 기기의 EZ 지원 여부와 제조사 등록 권한은 실기기에서 확인해야 합니다.</p>
+<section class="m3-setup-step" aria-label="원본 Lefant APK 설치">
+<h3>1. 원본 Lefant v3.3.25 설치</h3>
+<p><b>기존에 제공하던 M3 Max Wi-Fi EZ 시제품 APK는 원본 Lefant 앱과 다른 프로그램이므로 등록용으로 사용하지 마십시오.</b></p>
+<p>원본 XAPK는 기본 APK와 19개 분할 APK로 구성되어 있습니다. 원본의 전체 코드 및 서명, 리소스를 변경하지 않은 1:1 설치 묶음을 별도로 확인했습니다. 이 페이지에는 아직 해당 원본 설치 묶음의 다운로드 파일이 등록되어 있지 않습니다.</p>
+<p>원본 전체가 아닌 기능별 재작성 앱으로 대체하지 않겠습니다. 원본 파일 배포 경로가 확인되기 전에는 잘못된 APK 다운로드 QR을 표시하지 않습니다.</p>
 </section>
 <section class="m3-setup-step" aria-label="웹 관리 연결">
 <h3>2. 웹 관리 대상과 연결</h3>
