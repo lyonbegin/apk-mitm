@@ -103,6 +103,7 @@ async function m3RefreshDiscovery(){
    '\\n현장 PC의 후보 AP 연결: '+(o.diagnostics.wifi_ap_joined?'확인':'미확인')+
    '\\n검색 상태: '+o.diagnostics.scan_state+
    '\\n실기기 상태 응답: '+(data.gateway_online?'수신 (기종 별도 검증)':'미수신')+
+   '\\nTuya 클라우드 등록(현장보고): '+(data.cloud_activation_report?'등록 성공 보고 수신':'성공 보고 없음')+
    '\\nWi-Fi 공유기 최초 등록 / 로봇 인증: 미검증'+
    '\\n실제 로봇 제어: 비활성화'
   ):'연결 진단 기록 없음. 현장 PC에서 m3_onboard.py --scan --push를 실행하십시오.';
@@ -130,6 +131,7 @@ db.exec("CREATE INDEX IF NOT EXISTS idx_robots_session ON robots(session_id,acti
 db.exec("CREATE TABLE IF NOT EXISTS robot_pairs(robot_id INTEGER PRIMARY KEY,token_hash TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL)");
 db.exec("CREATE TABLE IF NOT EXISTS robot_observations(robot_id INTEGER PRIMARY KEY,last_seen TEXT NOT NULL,connected INTEGER NOT NULL,device_ref TEXT NOT NULL,protocol TEXT NOT NULL,raw_dps TEXT NOT NULL)");
 db.exec("CREATE TABLE IF NOT EXISTS robot_onboarding(robot_id INTEGER PRIMARY KEY,last_seen TEXT NOT NULL,phase TEXT NOT NULL,diagnostics TEXT NOT NULL)");
+db.exec("CREATE TABLE IF NOT EXISTS robot_activation_reports(robot_id INTEGER PRIMARY KEY,received_at TEXT NOT NULL,device_ref TEXT NOT NULL,method TEXT NOT NULL)");
 if(!(db.query("PRAGMA table_info(robots)").all() as Array<{name:string}>).some(x=>x.name==='model'))db.exec("ALTER TABLE robots ADD COLUMN model TEXT NOT NULL DEFAULT 'M330 Pro'");
 function ensureColumn(table:string,column:string){
  const names=db.query('PRAGMA table_info('+table+')').all() as Array<{name:string}>;
@@ -202,6 +204,22 @@ Bun.serve({port:Number(Bun.env.PORT||3000),hostname:'0.0.0.0',async fetch(req){
  const json=(data:any,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store',...cookie}});
  const bad=(detail:string,status=400)=>json({detail},status);
  if(p==='/api/health'&&req.method==='GET')return json({ok:true,service:'m330-pro-mobile-web',version:'0.5.0',mode:'robot_motion_simulation',fleet:true,motion_engine:'astar_footprint_coverage_battery_charge',common_areas_only:true,stairs_included:true,stairs_robot_cleanable:false,gateway_bridge:'read_only',m3_onboarding:'wifi_only_discovery',storage:'sqlite',at:new Date().toISOString()});
+
+ // Receive agent-reported successful Tuya cloud provisioning, not proof of LAN control.
+ // No local keys, full device IDs, Wi-Fi passwords or Tuya secrets are accepted.
+ if(p==='/api/m3/activation/report'&&req.method==='POST'){
+  const token=req.headers.get('X-M330-Pairing-Key')||'';
+  if(!/^[a-f0-9]{64}$/.test(token))return bad('현장 에이전트 키가 필요합니다.',401);
+  const paired=db.query('SELECT p.robot_id FROM robot_pairs p JOIN robots r ON r.id=p.robot_id WHERE p.token_hash=? AND r.active=1 AND r.model=?').get(tokenHash(token),'M3 Max') as any;
+  if(!paired)return bad('M3 Max에 승인된 현장 연결키가 아닙니다.',401);
+  let d:any;try{d=await readJson(req)}catch(e){return bad(messageError(e),400)}
+  if(d?.source!=='tuya_ez'||d?.cloud_confirmed!==true||typeof d?.device_ref!=='string'||!/^[a-f0-9]{12}$/.test(d.device_ref))
+   return bad('등록 성공 보고 형식 오류',422);
+  db.query('INSERT INTO robot_activation_reports(robot_id,received_at,device_ref,method) VALUES(?,?,?,?) ON CONFLICT(robot_id) DO UPDATE SET received_at=excluded.received_at,device_ref=excluded.device_ref,method=excluded.method')
+    .run(paired.robot_id,new Date().toISOString(),d.device_ref,'tuya_ez');
+  return json({ok:true,agent_report_received:true,cloud_confirmed_by_server:false,
+    hardware_verified:false,commands_enabled:false});
+ }
 
  // Discovery-only diagnostics for M3 Max. Gateway secret authenticates the on-site scanner,
  // but neither a discovered device nor an onboarded observation authorises commands.
@@ -297,6 +315,7 @@ Bun.serve({port:Number(Bun.env.PORT||3000),hostname:'0.0.0.0',async fetch(req){
   db.query('DELETE FROM robot_pairs WHERE robot_id=?').run(r.id);
   db.query('DELETE FROM robot_observations WHERE robot_id=?').run(r.id);
   db.query('DELETE FROM robot_onboarding WHERE robot_id=?').run(r.id);
+  db.query('DELETE FROM robot_activation_reports WHERE robot_id=?').run(r.id);
   return json({ok:true,archived:true,note:'이전 작업 기록은 보존됩니다.'});
  }
 
@@ -304,9 +323,12 @@ Bun.serve({port:Number(Bun.env.PORT||3000),hostname:'0.0.0.0',async fetch(req){
   const robot=lookupRobot(sid,u.searchParams.get('robot_id'));
   if(!robot)return bad('로봇을 찾을 수 없습니다.',404);
   const entry=db.query('SELECT last_seen,phase,diagnostics FROM robot_onboarding WHERE robot_id=?').get(robot.id) as any;
+  const activation=db.query('SELECT received_at,device_ref,method FROM robot_activation_reports WHERE robot_id=?').get(robot.id) as any;
   return json({robot_id:robot.id,model:robot.model||'M330 Pro',connection_transport:'wifi_only',observation:entry?{
    last_seen:entry.last_seen,phase:entry.phase,diagnostics:JSON.parse(entry.diagnostics)
   }:null,gateway_online:getGateway(robot.id).online,
+   cloud_activation_report:activation?{reported_at:activation.received_at,device_ref:activation.device_ref,method:activation.method,
+      reported_by:'authorized_onsite_agent',verified_independently:false}:null,
    pairing_completed:false,device_authenticated:false,commands_enabled:false,
    blocker:'M3 Max의 Wi-Fi AP 초기 활성화 페이로드 및 해당 제조사 Tuya 클라우드 토큰 실기기 검증 필요'});
  }
@@ -321,6 +343,7 @@ Bun.serve({port:Number(Bun.env.PORT||3000),hostname:'0.0.0.0',async fetch(req){
   db.query('INSERT INTO robot_pairs(robot_id,token_hash,created_at) VALUES(?,?,?) ON CONFLICT(robot_id) DO UPDATE SET token_hash=excluded.token_hash,created_at=excluded.created_at').run(r.id,tokenHash(key),new Date().toISOString());
   db.query('DELETE FROM robot_observations WHERE robot_id=?').run(r.id);
   db.query('DELETE FROM robot_onboarding WHERE robot_id=?').run(r.id);
+  db.query('DELETE FROM robot_activation_reports WHERE robot_id=?').run(r.id);
   return json({ok:true,robot_id:r.id,pair_key:key,mode:'read_only',note:'연결키는 1회만 표시되며 해당 로봇에서만 사용할 수 있습니다.'});
  }
  if(p==='/api/gateway/revoke'&&req.method==='POST'){
@@ -329,6 +352,7 @@ Bun.serve({port:Number(Bun.env.PORT||3000),hostname:'0.0.0.0',async fetch(req){
   db.query('DELETE FROM robot_pairs WHERE robot_id=?').run(r.id);
   db.query('DELETE FROM robot_observations WHERE robot_id=?').run(r.id);
   db.query('DELETE FROM robot_onboarding WHERE robot_id=?').run(r.id);
+  db.query('DELETE FROM robot_activation_reports WHERE robot_id=?').run(r.id);
   return json({ok:true,robot_id:r.id});
  }
  if(p==='/api/dashboard'&&req.method==='GET'){
