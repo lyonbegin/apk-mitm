@@ -32,11 +32,17 @@ jobs:
         run: |
           npm install --no-audit --no-fund
           npx playwright install --with-deps chromium
-      - name: Verify M3 Max Wi-Fi-only hotspot scanner and local browser helper
+      - name: Install local Tuya EZ activation SDK and validate no-credential flow
+        working-directory: m330-mobile-web/gateway
         run: |
-          python3 -m py_compile m330-mobile-web/gateway/m3_onboard.py m330-mobile-web/gateway/m3_wifi_local.py m330-mobile-web/gateway/test_m3_wifi.py
+          npm install --ignore-scripts --omit=dev --no-audit --no-fund
+          node --check m3_pair_ez.cjs
+          node m3_pair_ez.cjs --self-test | grep -q 'SELF_TEST_OK'
+      - name: Verify M3 Max Wi-Fi and cloud activation job (no real hardware)
+        run: |
+          python3 -m py_compile m330-mobile-web/gateway/m3_onboard.py m330-mobile-web/gateway/m3_wifi_local.py m330-mobile-web/gateway/m3_pair_job.py m330-mobile-web/gateway/test_m3_wifi.py m330-mobile-web/gateway/test_m3_pair_job.py
           python3 m330-mobile-web/gateway/m3_onboard.py --simulate | grep -q '"commands_enabled": false'
-          python3 -m unittest discover -s m330-mobile-web/gateway -p 'test_m3_wifi.py' -v
+          python3 -m unittest discover -s m330-mobile-web/gateway -p 'test_m3_*.py' -v
       - name: Verify localhost Wi-Fi operator page and deny unsolicited HTTP writes
         shell: bash
         run: |
@@ -49,6 +55,8 @@ jobs:
           done
           grep -q 'M3 Max Wi-Fi 연결' /tmp/m3-wifi-page.html
           grep -q '로봇 AP 접속' /tmp/m3-wifi-page.html
+          grep -q '실제 Wi-Fi EZ 등록' /tmp/m3-wifi-page.html
+          curl --fail --silent http://127.0.0.1:8765/api/pair/status | grep -q '"registered": false'
           http_code=$(curl --silent --output /tmp/m3-wifi-denied.json --write-out '%{http_code}' \
             -X POST http://127.0.0.1:8765/api/join \
             -H 'Content-Type: application/json' --data '{"ssid":"SmartLife"}')
