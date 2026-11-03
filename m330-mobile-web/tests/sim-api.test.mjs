@@ -133,3 +133,35 @@ await call('/api/gateway/revoke',{robot_id:first});
 const afterRevoke=await call('/api/m3/onboarding/status?robot_id='+first);
 assert.equal(afterRevoke.observation,null);
 console.log('PASS M3 Max Wi-Fi-only connection: secured AP/LAN observation, AP join proof, secrets discarded, BLE rejected, no unauthenticated device control, revoke');
+
+// Genuine registration report propagation is separate from discovery and hardware control.
+const m3Pair=await call('/api/gateway/pair',{robot_id:m3.robot.id});
+const activationPayload={source:'tuya_ez',cloud_confirmed:true,device_ref:'0123456789ab'};
+const unauthorized=await fetch(BASE+'/api/m3/activation/report',{method:'POST',
+ headers:{'Content-Type':'application/json'},body:JSON.stringify(activationPayload)});
+assert.equal(unauthorized.status,401);
+const wrongModel=await fetch(BASE+'/api/m3/activation/report',{method:'POST',
+ headers:{'Content-Type':'application/json','X-M330-Pairing-Key':pair.pair_key},
+ body:JSON.stringify(activationPayload)});
+assert.equal(wrongModel.status,401);
+const success=await fetch(BASE+'/api/m3/activation/report',{method:'POST',
+ headers:{'Content-Type':'application/json','X-M330-Pairing-Key':m3Pair.pair_key},
+ body:JSON.stringify(activationPayload)});
+assert.equal(success.status,200);
+const successBody=await success.json();
+assert.equal(successBody.agent_report_received,true);
+assert.equal(successBody.cloud_confirmed_by_server,false);
+assert.equal(successBody.commands_enabled,false);
+const verified=await call('/api/m3/onboarding/status?robot_id='+m3.robot.id);
+assert.equal(verified.cloud_activation_report.device_ref,'0123456789ab');
+assert.equal(verified.cloud_activation_report.verified_independently,false);
+assert.equal(verified.pairing_completed,false);
+assert.equal(verified.device_authenticated,false);
+const hasSecrets=await fetch(BASE+'/api/m3/activation/report',{method:'POST',
+ headers:{'Content-Type':'application/json','X-M330-Pairing-Key':m3Pair.pair_key},
+ body:JSON.stringify({...activationPayload,device_ref:'my-original-raw-device-id'})});
+assert.equal(hasSecrets.status,422);
+await call('/api/gateway/revoke',{robot_id:m3.robot.id});
+assert.equal((await call('/api/m3/onboarding/status?robot_id='+m3.robot.id)).cloud_activation_report,null);
+console.log('PASS M3 Max Tuya cloud activation reporting: local-key auth, hashed ID only, no fake hardware verification, lifecycle cleanup');
+
