@@ -9,6 +9,8 @@ Only a Tuya cloud-confirmed result can mark registration as successful.
 from __future__ import annotations
 
 import json
+import re
+from urllib.request import Request, urlopen
 from pathlib import Path
 import subprocess
 import threading
@@ -125,3 +127,30 @@ def start(payload):
     task = threading.Thread(target=_run, args=(config,), daemon=True)
     task.start()
     return status()
+
+
+def report_to_railway(bridge_key, server="https://m330-web-github-production.up.railway.app"):
+    """Report only a cloud-confirmed device fingerprint to the selected robot slot.
+
+    This is an ON-SITE AGENT assertion, not an independent Railway verification
+    and never enables real hardware writes.
+    """
+    if not isinstance(bridge_key, str) or not re.fullmatch(r"[0-9a-f]{64}", bridge_key):
+        raise ValueError("관리 웹에서 발급한 연결키가 필요합니다.")
+    with LOCK:
+        if not STATE.get("registered") or not STATE.get("devices"):
+            raise ValueError("실제 클라우드 등록 성공 결과가 없습니다.")
+        ref = STATE["devices"][0].get("ref", "")
+        if not re.fullmatch(r"[0-9a-f]{12}", ref):
+            raise ValueError("장치 지문이 유효하지 않습니다.")
+    body = json.dumps({"source":"tuya_ez","cloud_confirmed":True,"device_ref":ref}).encode()
+    req = Request(server.rstrip("/") + "/api/m3/activation/report",data=body,method="POST",
+                  headers={"Content-Type":"application/json","X-M330-Pairing-Key":bridge_key})
+    with urlopen(req,timeout=12) as response:
+        if response.status != 200:
+            raise RuntimeError("관리 웹 등록 결과 전송 실패")
+        reply = json.loads(response.read(2048))
+    return {
+        "agent_report_received": reply.get("agent_report_received") is True,
+        "hardware_control_verified": False,
+    }
