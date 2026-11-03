@@ -53,6 +53,31 @@ class TestPairJob(unittest.TestCase):
         self.assertEqual(code,"WORKER_FAILED")
         self.assertFalse(m3_pair_job.status()["registered"])
 
+    def test_cloud_report_only_after_confirmed_activation(self):
+        with m3_pair_job.LOCK:
+            m3_pair_job.STATE["registered"] = False
+            m3_pair_job.STATE["devices"] = []
+        with self.assertRaises(ValueError):
+            m3_pair_job.report_to_railway("a" * 64)
+        with m3_pair_job.LOCK:
+            m3_pair_job.STATE["registered"] = True
+            m3_pair_job.STATE["devices"] = [{"ref":"0123456789ab"}]
+        class Reply:
+            status = 200
+            def __enter__(self): return self
+            def __exit__(self,*args): return False
+            def read(self, size): return b'{"agent_report_received": true}'
+        def handler(req, timeout):
+            self.assertEqual(timeout, 12)
+            self.assertEqual(req.headers.get("X-m330-pairing-key"), "b" * 64)
+            self.assertNotIn("private-client-secret",req.data.decode())
+            self.assertIn("0123456789ab",req.data.decode())
+            return Reply()
+        with patch.object(m3_pair_job,"urlopen",side_effect=handler):
+            report = m3_pair_job.report_to_railway("b" * 64)
+        self.assertTrue(report["agent_report_received"])
+        self.assertFalse(report["hardware_control_verified"])
+
     def test_secrets_go_over_stdin_not_process_arguments(self):
         captured={}
         def runner(args,**kw):
